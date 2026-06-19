@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny any collection that isn't explicitly defined
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // App preferences and system settings
+    match /app_settings/{id} {
+      allow read, write: if true;
+    }
+
+    // Schedule overrides and reactive timings
+    match /schedule_overrides/{id} {
+      allow read, write: if true;
+    }
+
+    // Operator notes for specific reactors
+    match /reactor_notes/{id} {
+      allow read, write: if true;
+    }
+  }
+}

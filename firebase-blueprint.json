@@ -1,0 +1,115 @@
+{
+  "entities": {
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global settings for the application.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the configuration doc."
+        },
+        "alarm_sound": {
+          "type": "string"
+        },
+        "audio_enabled": {
+          "type": "boolean"
+        },
+        "is_stopped": {
+          "type": "boolean"
+        },
+        "is_marquee_paused": {
+          "type": "boolean"
+        },
+        "theme": {
+          "type": "string"
+        },
+        "interval_hours": {
+          "type": "integer"
+        },
+        "interval_minutes": {
+          "type": "integer"
+        },
+        "batch_duration_minutes": {
+          "type": "integer"
+        },
+        "columns_to_display": {
+          "type": "integer"
+        },
+        "alert_threshold_seconds": {
+          "type": "integer"
+        },
+        "running_text": {
+          "type": "string"
+        },
+        "marquee_speed": {
+          "type": "integer"
+        },
+        "grade_mode": {
+          "type": "string"
+        },
+        "current_grade": {
+          "type": "string"
+        },
+        "table_row_height": {
+          "type": "integer"
+        },
+        "table_font_size": {
+          "type": "integer"
+        }
+      },
+      "required": ["id"]
+    },
+    "ScheduleOverride": {
+      "title": "ScheduleOverride",
+      "description": "Schedule quick adjustments or manual delay entries.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the override document."
+        },
+        "timeValue": {
+          "type": "string"
+        },
+        "delayMinutes": {
+          "type": "integer"
+        },
+        "manualDelayMinutes": {
+          "type": "integer"
+        }
+      },
+      "required": ["id"]
+    },
+    "ReactorNote": {
+      "title": "ReactorNote",
+      "description": "Operator notes for specific reactors.",
+      "type": "object",
+      "properties": {
+        "reactor_id": {
+          "type": "string",
+          "description": "Unique identifier of the reactor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Operator notes text."
+        }
+      },
+      "required": ["reactor_id", "note"]
+    }
+  },
+  "firestore": {
+    "/app_settings/{id}": {
+      "schema": "AppSettings",
+      "description": "Global application preferences and state parameters."
+    },
+    "/schedule_overrides/{id}": {
+      "schema": "ScheduleOverride",
+      "description": "Manual overrides and offset timers for reactors."
+    },
+    "/reactor_notes/{id}": {
+      "schema": "ReactorNote",
+      "description": "Operator notes for each reactor."
+    }
+  }
+}

@@ -1,0 +1,95 @@
+
+export type GradeType = 'SM' | 'SLK' | 'SLP' | 'SE' | 'SR';
+export type AlarmSoundType = 'siren' | 'rocket' | 'jet' | 'powerpoint' | 'bomb' | 'fajar_sadboy';
+
+export interface ReactorConfig {
+  id: string;
+  name: string;
+  color: string;
+  textColor: string;
+  label: string; // S, T, U, V, W
+  subLabel?: string; // e.g., "USE LANCE 1"
+}
+
+export interface ItemConfig {
+  overrideTime?: string; // ISO String
+  isSkipped?: boolean;
+  skipReason?: 'PASS' | 'CLEANING_ROBOT' | 'ABNORMAL_REAKSI' | 'MAINTENANCE' | 'POISON_CHARGE';
+  mode?: 'OPEN' | 'CLOSE' | 'CLOSE TO OPEN';
+  grade?: GradeType; // Specific grade for this batch
+  note?: string;
+  shiftSubsequent?: boolean; // If true, this delay affects future times
+  manualDelayMinutes?: number; // Track explicitly applied delay
+  stageInfo?: string; // Specific label for this batch (e.g., "Sample Blowing")
+}
+
+export interface ScheduleItem {
+  id: string; // Unique ID for finding specific items (batch-reactor)
+  reactorId: string;
+  cycleIndex: number;
+  globalIndex: number;
+  batchNumber: number;
+  startTime: Date;
+  isToday: boolean;
+  status: 'past' | 'active' | 'future' | 'skipped';
+  config?: ItemConfig;
+  grade: GradeType; // Resolved grade
+  deltaMinutes: number; // Difference from original scheduled time
+}
+
+export interface AppState {
+  baseBatchNumber: number;
+  baseStartTime: string; // ISO string
+  intervalHours: number;
+  intervalMinutes: number;
+  columnsToDisplay: number;
+  itemConfigs: Record<string, ItemConfig>; // Replaced simple overrides with full config
+  audioEnabled: boolean;
+  currentGrade: GradeType; // Default global grade
+  isStopped: boolean; // Global stop/intervention state
+  reactorNotes: Record<string, string>; // Notes per reactor (S, T, U...)
+  alertThresholdSeconds: number; // Seconds before start to show full screen alert
+  runningText: string; // Dynamic marquee text
+  isMarqueePaused: boolean; // Control running text animation
+  marqueeSpeed: number; // Duration in seconds for marquee animation
+  theme: 'light' | 'dark'; // UI Theme
+  alarmSound: AlarmSoundType; // Selected alarm sound
+  
+  // Design / Layout Props
+  tableRowHeight: number; // pixel height
+  tableFontSize: number; // pixel font size base
+  batchDurationMinutes: number; // estimated duration of a batch in minutes
+  hiddenReactors: string[]; // IDs of reactors to hide
+  hiddenFields: string[]; // IDs of fields to hide (batch, time, grade, note, stage)
+  gradeMode: 'normal' | 'gradeChange'; // Added grade mode
+}
+
+// --- Silo Types ---
+export interface SiloData {
+  id: 'O' | 'P' | 'Q';
+  lotNumber: string;
+  capacitySet: string | number; // Changed to allow empty string
+  startTime: string | null; // HH:mm format
+  finishTime: string | null; // HH:mm format
+  percentage: string | number; // Changed to allow empty string
+  totalUpdate: string | number; // Changed to allow empty string
+  percentage_14?: string | number;
+  totalUpdate_14?: string | number;
+  percentage_22?: string | number;
+  totalUpdate_22?: string | number;
+}
+
+export interface SiloState {
+  activeSilo: 'O' | 'P' | 'Q' | null; // Allow null if none active initially
+  silos: Record<'O' | 'P' | 'Q', SiloData>;
+}
+
+export interface DemonomerData {
+  f2002: number;
+  aie2802: number;
+  pvcPercent: number;
+  multipliers: Record<GradeType, number>;
+  pvcFormula: string;
+  steamFormula: string;
+  cycleTimeFormula: string;
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Schedule Start",
+  "description": "A digital reaktor scheduling dashboard to manage start times, intervals, and delays for reaktors O-P-Q-R, replacing manual Excel sheets.",
+  "requestFramePermissions": []
+}
