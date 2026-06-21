@@ -66,7 +66,7 @@ export interface AppState {
 
 // --- Silo Types ---
 export interface SiloData {
-  id: 'O' | 'P' | 'Q';
+  id: 'K' | 'L' | 'M';
   lotNumber: string;
   capacitySet: string | number; // Changed to allow empty string
   startTime: string | null; // HH:mm format
@@ -80,8 +80,8 @@ export interface SiloData {
 }
 
 export interface SiloState {
-  activeSilo: 'O' | 'P' | 'Q' | null; // Allow null if none active initially
-  silos: Record<'O' | 'P' | 'Q', SiloData>;
+  activeSilo: 'K' | 'L' | 'M' | null; // Allow null if none active initially
+  silos: Record<'K' | 'L' | 'M', SiloData>;
 }
 
 export interface DemonomerData {

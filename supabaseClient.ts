@@ -1,6 +1,9 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc, 
   getDoc, 
   getDocs, 
@@ -13,8 +16,19 @@ import { getAuth, signInAnonymously } from "firebase/auth";
 import firebaseConfig from "./firebase-applet-config.json";
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-// Use the custom firestoreDatabaseId if provided, otherwise default
-const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Initialize Firestore with persistent local cache for high offline resilience
+let db: any;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  }, firebaseConfig.firestoreDatabaseId);
+} catch (err) {
+  console.warn("Failed to initializeFirestore with persistent local cache. Falling back to getFirestore...", err);
+  db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+}
 
 function sanitizeForFirestore(val: any): any {
   if (val === undefined) {

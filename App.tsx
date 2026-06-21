@@ -8,7 +8,7 @@ import { Demonomer } from './components/Demonomer';
 import { Silo } from './components/Silo';
 import { Settings, RefreshCw, AlertTriangle, Calendar, Hash, Volume2, VolumeX, Edit3, X, PlayCircle, Clock as ClockIcon, FileText, Ban, FastForward, PauseCircle, ArrowRightCircle, CheckCircle2, Wrench, RotateCcw, Power, Bell, Timer, ChevronDown, Info, Tag, ArrowRight, LayoutGrid, Activity, Database, Type, Sun, Moon, Pause, Play, Save, Gauge, Move, ArrowUp, ArrowDown, Palette, ZoomIn, ZoomOut, Monitor, Maximize2, Check, Calculator, StickyNote, Handshake, Trash2 } from 'lucide-react';
 import { supabase } from './supabaseClient';
-import { Reorder } from 'framer-motion';
+import { Reorder, motion } from 'framer-motion';
 
 const GRADES: GradeType[] = ['SM', 'SLK', 'SLP', 'SE', 'SR'];
 const STAGE_OPTIONS = ['Sample Blowing', 'Sample Washing', 'Sample Air Slurry'];
@@ -312,7 +312,7 @@ const App: React.FC = () => {
 
   // State for Silo START Confirmation Modal
   const [startSiloData, setStartSiloData] = useState<{
-      id: 'O' | 'P' | 'Q';
+      id: 'K' | 'L' | 'M';
       lotNumber: string;
       capacitySet: string;
       startTime: string;
@@ -334,10 +334,10 @@ const App: React.FC = () => {
   const [demonomerData, setDemonomerData] = useState<DemonomerData>({
       f2002: 125,
       aie2802: 1070,
-      pvcPercent: 25,
+      pvcPercent: 0.25,
       multipliers: { SM: 118, SLP: 108, SLK: 128, SE: 140, SR: 100 },
-      pvcFormula: "F2002*AI2802/1000*%PVC",
-      steamFormula: "PVC * Steam Rasio",
+      pvcFormula: "F2002*AI2802/1000*FAKTOR",
+      steamFormula: "(FIE2002 * FAKTOR)",
       cycleTimeFormula: "(COMP - HOLD) + 2"
   });
   const [demonomerGrade, setDemonomerGrade] = useState<GradeType>('SM');
@@ -355,9 +355,9 @@ const App: React.FC = () => {
   const [siloState, setSiloState] = useState<SiloState>({
       activeSilo: null, // No active silo initially
       silos: {
-          O: { id: 'O', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
-          P: { id: 'P', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
-          Q: { id: 'Q', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' }
+          K: { id: 'K', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
+          L: { id: 'L', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
+          M: { id: 'M', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' }
       }
   });
   
@@ -500,153 +500,187 @@ const App: React.FC = () => {
     if (showLoading) setIsLoading(true);
     try {
       // 1. Fetch Global Settings
-      const { data: settingsData, error: settingsError } = await supabase
-        .from('app_settings')
-        .select('*')
-        .single();
-
-      if (settingsError && settingsError.code !== 'PGRST116') throw settingsError;
+      let settingsData = null;
+      try {
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('*')
+          .single();
+        
+        if (error) {
+          if (error.code !== 'PGRST116') {
+            console.warn("Could not fetch app_settings from Firestore/Supabase:", error);
+          } else {
+            // PGRST116 means document doesn't exist, we can try to create it
+            const defaultSettings = {
+              id: 1,
+              base_batch_number: 5164,
+              base_start_time: new Date().toISOString(),
+              interval_hours: 1,
+              interval_minutes: 30,
+              columns_to_display: 4,
+              current_grade: 'SM',
+              is_stopped: false,
+              alert_threshold_seconds: 60,
+              running_text: "JIKA DELAY DIATAS 15 MENIT WAJIB ADJUST SCHEDULE!",
+              is_marquee_paused: false,
+              marquee_speed: 30,
+              theme: 'light',
+              alarm_sound: 'siren',
+              table_row_height: 40,
+              table_font_size: 16,
+              batch_duration_minutes: 120,
+              hidden_reactors: [],
+              hidden_fields: [],
+              grade_mode: 'normal'
+            };
+            try {
+              await supabase.from('app_settings').insert([defaultSettings]);
+              settingsData = defaultSettings;
+            } catch (insertErr) {
+              console.warn("Could not insert default settings (offline?):", insertErr);
+            }
+          }
+        } else {
+          settingsData = data;
+        }
+      } catch (err) {
+        console.warn("Error getting app_settings from Firestore/Supabase (client might be offline):", err);
+      }
 
       // 2. Fetch Reactor Notes
-      const { data: notesData, error: notesError } = await supabase
-        .from('reactor_notes')
-        .select('*');
-      
-      if (notesError) throw notesError;
-
       const notesMap: Record<string, string> = {};
-      if (notesData) {
+      try {
+        const { data: notesData, error: notesError } = await supabase
+          .from('reactor_notes')
+          .select('*');
+        
+        if (notesError) {
+          console.warn("Could not fetch reactor_notes from Firestore/Supabase:", notesError);
+        } else if (notesData) {
           notesData.forEach((row: any) => {
-              notesMap[row.reactor_id] = row.note;
+            notesMap[row.reactor_id] = row.note;
           });
+        }
+      } catch (err) {
+        console.warn("Error getting reactor_notes from Firestore/Supabase (client might be offline):", err);
       }
 
       // 3. Fetch Schedule Overrides (Item Configs)
-      const { data: overridesData, error: overridesError } = await supabase
-        .from('schedule_overrides')
-        .select('*');
-
-      if (overridesError) throw overridesError;
-
       const itemConfigsMap: Record<string, ItemConfig> = {};
-      if (overridesData) {
+      try {
+        const { data: overridesData, error: overridesError } = await supabase
+          .from('schedule_overrides')
+          .select('*');
+
+        if (overridesError) {
+          console.warn("Could not fetch schedule_overrides from Firestore/Supabase:", overridesError);
+        } else if (overridesData) {
           overridesData.forEach((row: any) => {
-              itemConfigsMap[row.id] = {
-                  overrideTime: row.override_time,
-                  isSkipped: row.is_skipped,
-                  skipReason: row.skip_reason || 'PASS',
-                  mode: row.mode,
-                  grade: row.grade,
-                  note: row.note,
-                  shiftSubsequent: row.shift_subsequent,
-                  manualDelayMinutes: row.manual_delay_minutes,
-                  stageInfo: row.stage_info || ''
-              };
+            itemConfigsMap[row.id] = {
+              overrideTime: row.override_time,
+              isSkipped: row.is_skipped,
+              skipReason: row.skip_reason || 'PASS',
+              mode: row.mode,
+              grade: row.grade,
+              note: row.note,
+              shiftSubsequent: row.shift_subsequent,
+              manualDelayMinutes: row.manual_delay_minutes,
+              stageInfo: row.stage_info || ''
+            };
           });
+        }
+      } catch (err) {
+        console.warn("Error getting schedule_overrides from Firestore/Supabase (client might be offline):", err);
       }
 
       // Apply to State
       if (settingsData) {
-          setConfig({
-              baseBatchNumber: settingsData.base_batch_number !== undefined && settingsData.base_batch_number !== null ? settingsData.base_batch_number : 5164,
-              baseStartTime: settingsData.base_start_time || new Date().toISOString(),
-              intervalHours: settingsData.interval_hours !== undefined && settingsData.interval_hours !== null ? settingsData.interval_hours : 1,
-              intervalMinutes: settingsData.interval_minutes !== undefined && settingsData.interval_minutes !== null ? settingsData.interval_minutes : 30,
-              columnsToDisplay: settingsData.columns_to_display !== undefined && settingsData.columns_to_display !== null ? settingsData.columns_to_display : 4,
-              audioEnabled: true, // Auto-enable audio as requested
-              currentGrade: (settingsData.current_grade as GradeType) || 'SM',
-              isStopped: settingsData.is_stopped || false,
-              alertThresholdSeconds: settingsData.alert_threshold_seconds !== undefined && settingsData.alert_threshold_seconds !== null ? settingsData.alert_threshold_seconds : 60,
-              runningText: settingsData.running_text || "JIKA DELAY DIATAS 15 MENIT WAJIB ADJUST SCHEDULE!",
-              isMarqueePaused: settingsData.is_marquee_paused || false,
-              marqueeSpeed: settingsData.marquee_speed || 30,
-              theme: (settingsData.theme as 'light' | 'dark') || 'light',
-              alarmSound: (settingsData.alarm_sound as AlarmSoundType) || 'siren',
-              reactorNotes: notesMap,
-              itemConfigs: itemConfigsMap,
-              tableRowHeight: settingsData.table_row_height || 40,
-              tableFontSize: settingsData.table_font_size || 16,
-              batchDurationMinutes: settingsData.batch_duration_minutes || 120,
-              hiddenReactors: settingsData.hidden_reactors || [],
-              hiddenFields: settingsData.hidden_fields || [],
-              gradeMode: settingsData.grade_mode || 'normal'
-          });
+        setConfig((prev) => {
+          const updated = {
+            ...prev,
+            baseBatchNumber: settingsData.base_batch_number !== undefined && settingsData.base_batch_number !== null ? settingsData.base_batch_number : prev.baseBatchNumber,
+            baseStartTime: settingsData.base_start_time || prev.baseStartTime,
+            intervalHours: settingsData.interval_hours !== undefined && settingsData.interval_hours !== null ? settingsData.interval_hours : prev.intervalHours,
+            intervalMinutes: settingsData.interval_minutes !== undefined && settingsData.interval_minutes !== null ? settingsData.interval_minutes : prev.intervalMinutes,
+            columnsToDisplay: settingsData.columns_to_display !== undefined && settingsData.columns_to_display !== null ? settingsData.columns_to_display : prev.columnsToDisplay,
+            audioEnabled: true, // Auto-enable audio as requested
+            currentGrade: (settingsData.current_grade as GradeType) || prev.currentGrade,
+            isStopped: settingsData.is_stopped || prev.isStopped,
+            alertThresholdSeconds: settingsData.alert_threshold_seconds !== undefined && settingsData.alert_threshold_seconds !== null ? settingsData.alert_threshold_seconds : prev.alertThresholdSeconds,
+            runningText: settingsData.running_text || prev.runningText,
+            isMarqueePaused: settingsData.is_marquee_paused || prev.isMarqueePaused,
+            marqueeSpeed: settingsData.marquee_speed || prev.marqueeSpeed,
+            theme: (settingsData.theme as 'light' | 'dark') || prev.theme,
+            alarmSound: (settingsData.alarm_sound as AlarmSoundType) || prev.alarmSound,
+            reactorNotes: { ...prev.reactorNotes, ...notesMap },
+            itemConfigs: { ...prev.itemConfigs, ...itemConfigsMap },
+            tableRowHeight: settingsData.table_row_height || prev.tableRowHeight,
+            tableFontSize: settingsData.table_font_size || prev.tableFontSize,
+            batchDurationMinutes: settingsData.batch_duration_minutes || prev.batchDurationMinutes,
+            hiddenReactors: settingsData.hidden_reactors || prev.hiddenReactors,
+            hiddenFields: settingsData.hidden_fields || prev.hiddenFields,
+            gradeMode: settingsData.grade_mode || prev.gradeMode
+          };
+          return updated;
+        });
 
-          // Load Zoom Level
-          if (settingsData.zoom_level) {
-              setZoomLevel(settingsData.zoom_level);
+        // Load Zoom Level
+        if (settingsData.zoom_level) {
+          setZoomLevel(settingsData.zoom_level);
+        }
+
+        // Load Catalyst Data
+        if (settingsData.catalyst_data) {
+          setCatalystData(settingsData.catalyst_data);
+        }
+
+        // Load Silo State
+        if (settingsData.silo_state) {
+          const loaded = { ...settingsData.silo_state };
+          if (loaded.silos) {
+            const mappedSilos: any = {
+              K: { id: 'K', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
+              L: { id: 'L', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
+              M: { id: 'M', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' }
+            };
+            const mapping: Record<string, string> = { O: 'K', P: 'L', Q: 'M' };
+            Object.keys(loaded.silos).forEach((key) => {
+              const targetKey = mapping[key] || key;
+              if (targetKey === 'K' || targetKey === 'L' || targetKey === 'M') {
+                mappedSilos[targetKey] = {
+                  ...mappedSilos[targetKey],
+                  ...loaded.silos[key],
+                  id: targetKey
+                };
+              }
+            });
+            loaded.silos = mappedSilos;
           }
-
-          // Load Catalyst Data
-          if (settingsData.catalyst_data) {
-              setCatalystData(settingsData.catalyst_data);
+          if (loaded.activeSilo) {
+            const mapping: Record<string, string> = { O: 'K', P: 'L', Q: 'M' };
+            loaded.activeSilo = mapping[loaded.activeSilo] || loaded.activeSilo;
+            if (loaded.activeSilo !== 'K' && loaded.activeSilo !== 'L' && loaded.activeSilo !== 'M') {
+              loaded.activeSilo = null;
+            }
           }
+          setSiloState(loaded);
+        }
 
-          // Load Silo State
-          if (settingsData.silo_state) {
-              setSiloState(settingsData.silo_state);
-          }
-
-          // Load Demonomer Data
-          if (settingsData.demonomer_data) {
-              setDemonomerData(settingsData.demonomer_data);
-          }
-
-          // Load Grade Mode
-          if (settingsData && 'grade_mode' in settingsData && settingsData.grade_mode) {
-              setConfig(prev => ({ ...prev, gradeMode: settingsData.grade_mode as 'normal' | 'gradeChange' }));
-          }
-
+        // Load Demonomer Data
+        if (settingsData.demonomer_data) {
+          setDemonomerData(settingsData.demonomer_data);
+        }
       } else {
-           // Init defaults if no settings exist
-           const defaultSettings = {
-               id: 1,
-               base_batch_number: 5164,
-               base_start_time: new Date().toISOString(),
-               interval_hours: 1,
-               interval_minutes: 30,
-               columns_to_display: 4,
-               current_grade: 'SM',
-               is_stopped: false,
-               alert_threshold_seconds: 60,
-               running_text: "JIKA DELAY DIATAS 15 MENIT WAJIB ADJUST SCHEDULE!",
-               is_marquee_paused: false,
-               marquee_speed: 30,
-               theme: 'light',
-               alarm_sound: 'siren',
-               table_row_height: 40,
-               table_font_size: 16,
-               batch_duration_minutes: 120,
-               hidden_reactors: [],
-               hidden_fields: [],
-               grade_mode: 'normal'
-           };
-           await supabase.from('app_settings').insert([defaultSettings]);
-           setConfig(prev => ({
-               ...prev,
-               baseBatchNumber: defaultSettings.base_batch_number,
-               baseStartTime: defaultSettings.base_start_time,
-               intervalHours: defaultSettings.interval_hours,
-               intervalMinutes: defaultSettings.interval_minutes,
-               columnsToDisplay: defaultSettings.columns_to_display,
-               currentGrade: defaultSettings.current_grade as GradeType,
-               isStopped: defaultSettings.is_stopped,
-               alertThresholdSeconds: defaultSettings.alert_threshold_seconds,
-               runningText: defaultSettings.running_text,
-               isMarqueePaused: defaultSettings.is_marquee_paused,
-               marqueeSpeed: defaultSettings.marquee_speed,
-               theme: defaultSettings.theme as 'light' | 'dark',
-               alarmSound: defaultSettings.alarm_sound as AlarmSoundType,
-               tableRowHeight: defaultSettings.table_row_height,
-               tableFontSize: defaultSettings.table_font_size,
-               batchDurationMinutes: defaultSettings.batch_duration_minutes,
-               hiddenReactors: defaultSettings.hidden_reactors,
-               hiddenFields: defaultSettings.hidden_fields,
-               gradeMode: defaultSettings.grade_mode as 'normal' | 'gradeChange'
-           }));
+        // If settings data could not be fetched, we still load notes/overrides on top of current config!
+        setConfig((prev) => ({
+          ...prev,
+          reactorNotes: { ...prev.reactorNotes, ...notesMap },
+          itemConfigs: { ...prev.itemConfigs, ...itemConfigsMap }
+        }));
       }
     } catch (error) {
-      console.error("Error loading data from Supabase:", error);
+      console.warn("Unexpected error inside loadData loop:", error);
     } finally {
       if (showLoading) setIsLoading(false);
     }
@@ -974,7 +1008,7 @@ const App: React.FC = () => {
   // --- Silo Handlers ---
   
   // 1. Initial Click Handler: Opens the Confirmation Modal
-  const handleSiloSwitch = (newSiloId: 'O' | 'P' | 'Q') => {
+  const handleSiloSwitch = (newSiloId: 'K' | 'L' | 'M') => {
       if (newSiloId === siloState.activeSilo) return;
 
       const currentTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -1029,7 +1063,7 @@ const App: React.FC = () => {
       setStartSiloData(null);
   };
 
-  const handleSiloDataChange = (siloId: 'O' | 'P' | 'Q', field: keyof SiloData, value: any) => {
+  const handleSiloDataChange = (siloId: 'K' | 'L' | 'M', field: keyof SiloData, value: any) => {
       const newSiloState = {
           ...siloState,
           silos: {
@@ -1471,22 +1505,40 @@ const App: React.FC = () => {
           </div>
 
           {/* Center Section: Title */}
-          <div className="flex flex-col items-center justify-center shrink-0 p-1.5 rounded-xl bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 shadow-sm mx-4">
-            <h1 className="text-[2.0em] font-black tracking-tighter leading-none uppercase flex items-center gap-2 drop-shadow-sm">
-               <span className="text-violet-600 dark:text-violet-400">SCHEDULE</span> 
-               <span className="text-slate-800 dark:text-slate-200">START</span>
-            </h1>
-            <div className="flex items-center gap-4 mt-1 border-t-2 border-slate-200 dark:border-slate-700 pt-1 w-full justify-center">
-                <span className="text-[0.8em] font-black text-slate-500 dark:text-slate-400 tracking-widest uppercase">
+          <motion.div 
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: "spring", stiffness: 100, damping: 15 }}
+            className="flex flex-col items-center justify-center shrink-0 p-3 rounded-2xl bg-gradient-to-b from-white to-slate-50/80 dark:from-slate-900 dark:to-slate-950/80 backdrop-blur-md border border-violet-500/20 dark:border-violet-400/20 shadow-lg shadow-violet-500/5 mx-4 relative overflow-hidden group"
+          >
+            {/* Ambient Background Glow Effect */}
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-fuchsia-500 to-cyan-500 opacity-50"></div>
+            <div className="absolute -inset-10 bg-radial from-violet-500/5 to-transparent rounded-full blur-2xl group-hover:scale-110 transition-transform duration-1000"></div>
+
+            <motion.h1 
+              animate={{ scale: [1, 1.01, 1] }}
+              transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+              className="text-[2.2em] font-black tracking-tighter leading-none uppercase flex items-center gap-1.5 drop-shadow-md select-none"
+            >
+               <span className="bg-clip-text text-transparent bg-gradient-to-r from-violet-600 via-indigo-600 to-violet-500 dark:from-violet-400 dark:via-indigo-400 dark:to-violet-300">
+                 SCHEDULE
+               </span> 
+               <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 dark:from-emerald-400 dark:via-teal-400 dark:to-cyan-400 font-extrabold">
+                 START
+               </span>
+            </motion.h1>
+
+            <div className="flex items-center gap-3 mt-1.5 border-t border-slate-200/60 dark:border-slate-800/60 pt-1.5 w-full justify-center">
+                <span className="text-[0.88em] font-black text-slate-800 dark:text-slate-100 tracking-widest uppercase bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-200/50 dark:border-slate-700/50 hover:text-violet-600 dark:hover:text-violet-400 transition-colors">
                     REAKTOR PVC 4
                 </span>
-                <div className="h-3 w-px bg-slate-300 dark:bg-slate-600"></div>
-                <span className="text-[0.8em] font-black text-violet-600 dark:text-violet-400 tracking-widest uppercase flex items-center gap-2">
-                    <Calendar className="w-[1.2em] h-[1.2em]" />
-                    {formatDate(now)}
+                <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"></div>
+                <span className="text-[0.88em] font-black text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-fuchsia-500 dark:from-violet-400 dark:to-fuchsia-400 tracking-widest uppercase flex items-center gap-1.5 bg-violet-50/50 dark:bg-violet-950/30 px-2 py-0.5 rounded-lg border border-violet-100 dark:border-violet-900/30">
+                    <Calendar className="w-[0.75rem] h-[0.75rem] text-violet-500 dark:text-violet-400 animate-pulse" />
+                    {formatDate(getBatchDate(now))}
                 </span>
             </div>
-          </div>
+          </motion.div>
 
           {/* Right Section: Navigation & Settings */}
           <div className="flex shrink-0">
@@ -1856,17 +1908,19 @@ const App: React.FC = () => {
                       />
                   </div>
                   <div className="bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-white p-1 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner flex flex-col justify-center">
-                      <span className="text-[0.85em] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block text-center mb-0.5">RESULT</span>
+                      <span className="text-[0.85em] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block text-center mb-0.5">STEAM TOTAL</span>
                       <div className="text-3xl font-black text-center drop-shadow-sm">
-                          {Math.round(evaluateMath(demonomerData.steamFormula, {
-                              'PVC': evaluateMath(demonomerData.pvcFormula, {
-                                  'AI2802': demonomerData.aie2802,
-                                  '%PVC': demonomerData.pvcPercent / 100,
-                                  'F2002': demonomerData.f2002
-                              }),
-                              'Steam Rasio': demonomerData.multipliers[activeDemonomerGrade] || 0,
-                              'Multiplier': demonomerData.multipliers[activeDemonomerGrade] || 0
-                          }))}
+                          {Math.round(evaluateMath(
+                              (!demonomerData.steamFormula || demonomerData.steamFormula.includes("PVC * Steam Rasio") || demonomerData.steamFormula.includes("PVC * Multiplier") || demonomerData.steamFormula === "%PVC * F2002")
+                                  ? "(FIE2002 * FAKTOR)"
+                                  : demonomerData.steamFormula,
+                              {
+                                  'F2002': demonomerData.f2002,
+                                  'FIE2002': demonomerData.f2002,
+                                  'FAKTOR': demonomerData.pvcPercent,
+                                  '%PVC': demonomerData.pvcPercent
+                              }
+                          ))}
                       </div>
                   </div>
               </div>
@@ -1891,10 +1945,10 @@ const App: React.FC = () => {
                           </tr>
                       </thead>
                       <tbody>
-                          {(['f', 'h', 'g'] as const).map((key) => (
+                          {(['f', 'g', 'h'] as const).map((key) => (
                               <tr key={key} className="border-b border-slate-50 dark:border-slate-700/50 last:border-0">
-                                  <td className={`py-2 font-black uppercase text-center rounded-l-md ${key === 'f' ? 'bg-slate-800 text-white' : key === 'h' ? 'bg-yellow-400 text-slate-900' : 'bg-purple-600 text-white'}`} style={{ width: '30px', fontSize: '1.1em' }}>
-                                      {key}
+                                  <td className={`py-2 font-black uppercase text-center rounded-l-md ${(key === 'f' || key === 'g') ? 'bg-black text-white' : 'bg-yellow-400 text-slate-900'}`} style={{ width: '30px', fontSize: '1.1em' }}>
+                                      {key === 'g' ? 'f' : key}
                                   </td>
                                   <td className="py-1 px-1">
                                       <input 
@@ -2706,10 +2760,6 @@ const App: React.FC = () => {
                       
                       {/* RPM Tachometer LED Indicator Bar */}
                       <div className="w-full bg-zinc-900/90 border border-zinc-800 p-3 rounded-2xl mb-6 shadow-2xl">
-                          <div className="flex justify-between text-[0.65em] text-zinc-500 font-bold tracking-widest uppercase mb-1.5 px-1 font-mono">
-                              <span>REV LIMITER STATUS</span>
-                              <span className={`text-${activeTheme.primary} animate-pulse`}>8,500 RPM (CRITICAL POWER)</span>
-                          </div>
                           <div className="flex gap-1.5 h-6">
                               {Array.from({ length: totalBars }).map((_, idx) => {
                                   const isActive = idx < activeBarsCount;
@@ -2747,12 +2797,6 @@ const App: React.FC = () => {
                           </div>
                       </div>
 
-                      {/* Speedometer Status Alert Bar */}
-                      <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full border border-${activeTheme.primary}/35 bg-zinc-900/90 text-${activeTheme.primary} text-[10px] font-black tracking-widest animate-pulse mb-6 uppercase`}>
-                          <Gauge className="w-4 h-4" />
-                          LAUNCH READY: SEQUENCE INITIALIZED
-                      </div>
-
                       {/* Main Cockpit Circular Gauge Container */}
                       <div className="relative w-64 h-64 flex items-center justify-center mb-6">
                           {/* Inner glowing dials spinning */}
@@ -2761,7 +2805,7 @@ const App: React.FC = () => {
                           
                           <div className={`absolute inset-10 rounded-full bg-zinc-950/95 border-2 border-zinc-800 shadow-[inset_0_0_30px_rgba(${flashRGB},0.15)] flex flex-col items-center justify-center z-10`}>
                               {/* Digital Speedometer Gauge values */}
-                              <span className="text-[0.65em] font-black tracking-widest text-zinc-500 uppercase mt-2 font-mono">ACTIVE COCKPIT</span>
+                              <span className="text-[0.65em] font-black tracking-widest text-zinc-500 uppercase mt-2 font-mono">REAKTOR READY</span>
                               
                               {/* Reactor letter shown as massive Digital Sport Gear Number */}
                               <div className="relative leading-none h-[90px] flex items-center justify-center">
@@ -2769,10 +2813,6 @@ const App: React.FC = () => {
                                       {fullScreenAlertItem.reactorId}
                                   </span>
                               </div>
-
-                              <span className={`text-[10px] font-black text-black bg-${activeTheme.primary} uppercase tracking-[0.25em] px-3 py-1 rounded border border-${activeTheme.primary}/30 mt-1 animate-pulse`}>
-                                  REAKTOR READY
-                              </span>
                           </div>
 
                           {/* Outer Speedometer meter */}
@@ -2812,7 +2852,6 @@ const App: React.FC = () => {
 
                       {/* Countdown Box */}
                       <div className={`w-full bg-zinc-900/90 border border-${activeTheme.primary}/30 px-6 py-4 rounded-2xl flex flex-col items-center gap-1 shadow-inner animate-pulse mb-6`}>
-                          <span className={`text-[9px] font-black tracking-widest text-${activeTheme.primary} uppercase font-mono`}>SYSTEM T-MINUS COUNTDOWN</span>
                           <div className="text-2xl font-extrabold text-white flex items-baseline gap-1.5">
                               <span className={`text-4xl text-${activeTheme.primary} font-mono font-black`}>{currentSec}</span>
                               <span className="text-xs text-slate-400 uppercase">SECONDS</span>

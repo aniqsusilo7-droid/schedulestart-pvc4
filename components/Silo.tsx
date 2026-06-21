@@ -4,22 +4,22 @@ import { Database, CheckCircle2, Play } from 'lucide-react';
 import { SiloData } from '../types';
 
 interface SiloProps {
-    activeSilo: 'O' | 'P' | 'Q' | null;
-    silos: Record<'O' | 'P' | 'Q', SiloData>;
-    onDataChange?: (siloId: 'O'|'P'|'Q', field: keyof SiloData, value: any) => void;
-    onSiloSelect?: (siloId: 'O'|'P'|'Q') => void;
+    activeSilo: 'K' | 'L' | 'M' | null;
+    silos: Record<'K' | 'L' | 'M', SiloData>;
+    onDataChange?: (siloId: 'K'|'L'|'M', field: keyof SiloData, value: any) => void;
+    onSiloSelect?: (siloId: 'K'|'L'|'M') => void;
 }
 
 export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onSiloSelect }) => {
   
   // Helper to handle input changes
-  const handleChange = (id: 'O'|'P'|'Q', field: keyof SiloData, val: string) => {
+  const handleChange = (id: 'K'|'L'|'M', field: keyof SiloData, val: string) => {
       if (!onDataChange) return;
       onDataChange(id, field, val);
   };
 
   // Helper for conditional styling for Columns
-  const getColumnClass = (siloId: 'O'|'P'|'Q') => {
+  const getColumnClass = (siloId: 'K'|'L'|'M') => {
       if (activeSilo === siloId) {
           return "bg-emerald-100/50 border-emerald-500/50";
       }
@@ -27,7 +27,7 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
   };
 
   // Helper for conditional styling for Headers
-  const getHeaderClass = (siloId: 'O'|'P'|'Q') => {
+  const getHeaderClass = (siloId: 'K'|'L'|'M') => {
       if (activeSilo === siloId) {
           return "bg-emerald-600 ring-inset ring-4 ring-yellow-400 z-10 scale-105 shadow-xl opacity-100";
       }
@@ -57,7 +57,7 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                 <h2 className="text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">Silo Monitor</h2>
                 <div className="flex items-center gap-3 mt-1">
                     <p className="text-slate-500 dark:text-slate-400 font-semibold uppercase text-sm tracking-widest">Storage & Distribution</p>
-                    <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700 uppercase">O - P - Q Control</span>
+                    <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700 uppercase">K - L - M Control</span>
                 </div>
             </div>
           </div>
@@ -78,7 +78,7 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                   <thead>
                       <tr>
                           <th className="border-b-2 border-slate-100 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-800/30 text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] text-xs font-bold">PARAMETER</th>
-                          {['O', 'P', 'Q'].map((id) => (
+                          {['K', 'L', 'M'].map((id) => (
                               <th key={`head-${id}`} className={`border-b-2 border-slate-100 dark:border-slate-800 p-4 uppercase tracking-[0.2em] text-3xl font-black ${activeSilo === id ? 'bg-cyan-500 text-white' : 'bg-slate-50/50 dark:bg-slate-800/30 text-slate-800 dark:text-slate-200'}`}>
                                   SILO {id}
                               </th>
@@ -89,7 +89,7 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                       {/* ACTION Row */}
                       <tr className="border-b border-slate-100 dark:border-slate-800/50">
                           <td className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 bg-slate-50/30 dark:bg-slate-800/10">STATUS</td>
-                          {['O', 'P', 'Q'].map((siloId) => (
+                          {['K', 'L', 'M'].map((siloId) => (
                               <td key={`action-${siloId}`} className="p-4">
                                    {activeSilo === siloId ? (
                                        <div className="w-full flex items-center justify-center gap-2 bg-emerald-500 text-white px-4 py-4 rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20">
@@ -98,7 +98,7 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                                        </div>
                                    ) : (
                                        <button 
-                                          onClick={() => onSiloSelect && onSiloSelect(siloId as 'O'|'P'|'Q')}
+                                          onClick={() => onSiloSelect && onSiloSelect(siloId as 'K'|'L'|'M')}
                                           className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-cyan-50 dark:bg-slate-800 dark:hover:bg-cyan-900/20 text-slate-500 hover:text-cyan-600 dark:hover:text-cyan-400 px-4 py-4 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 hover:border-cyan-300 transition-all uppercase tracking-wider"
                                        >
                                            <Play className="w-4 h-4" />
@@ -112,12 +112,12 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                       {/* Lot Number Row */}
                       <tr className="border-b border-slate-100 dark:border-slate-800/50">
                           <td className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 bg-slate-50/30 dark:bg-slate-800/10">LOT NUMBER</td>
-                          {['O', 'P', 'Q'].map((id) => (
+                          {['K', 'L', 'M'].map((id) => (
                               <td key={`lot-${id}`} className="p-4">
                                   <input 
                                       type="text" 
-                                      value={silos[id as 'O'|'P'|'Q'].lotNumber} 
-                                      onChange={(e) => handleChange(id as 'O'|'P'|'Q', 'lotNumber', e.target.value)}
+                                      value={silos[id as 'K'|'L'|'M'].lotNumber} 
+                                      onChange={(e) => handleChange(id as 'K'|'L'|'M', 'lotNumber', e.target.value)}
                                       className="w-full bg-violet-50 dark:bg-violet-900/20 border-none rounded-xl p-4 text-xl font-black text-center text-slate-900 dark:text-white focus:ring-4 focus:ring-violet-500/20 transition-all"
                                       placeholder="---"
                                   />
@@ -128,12 +128,12 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                       {/* Set Row */}
                       <tr className="border-b border-slate-100 dark:border-slate-800/50">
                           <td className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 bg-slate-50/30 dark:bg-slate-800/10">CAPACITY (T)</td>
-                          {['O', 'P', 'Q'].map((id) => (
+                          {['K', 'L', 'M'].map((id) => (
                               <td key={`set-${id}`} className="p-4">
                                   <input 
                                       type="number" 
-                                      value={silos[id as 'O'|'P'|'Q'].capacitySet} 
-                                      onChange={(e) => handleChange(id as 'O'|'P'|'Q', 'capacitySet', e.target.value)}
+                                      value={silos[id as 'K'|'L'|'M'].capacitySet} 
+                                      onChange={(e) => handleChange(id as 'K'|'L'|'M', 'capacitySet', e.target.value)}
                                       className="w-full bg-violet-50 dark:bg-violet-900/20 border-none rounded-xl p-4 text-4xl font-black text-center text-cyan-600 dark:text-cyan-400 focus:ring-4 focus:ring-violet-500/20 transition-all"
                                       placeholder="0"
                                   /> 
@@ -144,13 +144,13 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                       {/* Start Row */}
                       <tr className="border-b border-slate-100 dark:border-slate-800/50">
                           <td className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 bg-slate-50/30 dark:bg-slate-800/10">START TIME</td>
-                          {['O', 'P', 'Q'].map((id) => (
+                          {['K', 'L', 'M'].map((id) => (
                               <td key={`start-${id}`} className="p-4">
                                   <input 
                                       type="text"
                                       placeholder="00:00" 
-                                      value={silos[id as 'O'|'P'|'Q'].startTime || ''}
-                                      onChange={(e) => handleChange(id as 'O'|'P'|'Q', 'startTime', e.target.value)}
+                                      value={silos[id as 'K'|'L'|'M'].startTime || ''}
+                                      onChange={(e) => handleChange(id as 'K'|'L'|'M', 'startTime', e.target.value)}
                                       className="w-full bg-violet-50 dark:bg-violet-900/20 border-none rounded-xl p-4 text-xl font-black text-center text-slate-900 dark:text-white focus:ring-4 focus:ring-violet-500/20 transition-all"
                                   />
                               </td>
@@ -160,13 +160,13 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                        {/* Finish Row */}
                       <tr>
                           <td className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 bg-slate-50/30 dark:bg-slate-800/10">FINISH TIME</td>
-                          {['O', 'P', 'Q'].map((id) => (
+                          {['K', 'L', 'M'].map((id) => (
                               <td key={`finish-${id}`} className="p-4">
                                   <input 
                                       type="text" 
                                       placeholder="00:00"
-                                      value={silos[id as 'O'|'P'|'Q'].finishTime || ''}
-                                      onChange={(e) => handleChange(id as 'O'|'P'|'Q', 'finishTime', e.target.value)}
+                                      value={silos[id as 'K'|'L'|'M'].finishTime || ''}
+                                      onChange={(e) => handleChange(id as 'K'|'L'|'M', 'finishTime', e.target.value)}
                                       className="w-full bg-violet-50 dark:bg-violet-900/20 border-none rounded-xl p-4 text-xl font-black text-center text-rose-600 dark:text-rose-400 focus:ring-4 focus:ring-violet-500/20 transition-all"
                                   />
                               </td>
@@ -190,75 +190,75 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                           </div>
                       ))}
                   </div>
-                  {/* Silo O Col */}
+                  {/* Silo K Col */}
                   <div className="flex flex-col gap-2">
                        <UpdateRow 
-                          val={String(silos.O.percentage || '')} 
-                          total={String(silos.O.totalUpdate || '')} 
-                          onPercentChange={(v) => handleChange('O', 'percentage', v)}
-                          onTotalChange={(v) => handleChange('O', 'totalUpdate', v)}
+                          val={String(silos.K.percentage || '')} 
+                          total={String(silos.K.totalUpdate || '')} 
+                          onPercentChange={(v) => handleChange('K', 'percentage', v)}
+                          onTotalChange={(v) => handleChange('K', 'totalUpdate', v)}
                           getInputClass={getInputClass}
                       />
                        <UpdateRow 
-                          val={String(silos.O.percentage_14 || '')} 
-                          total={String(silos.O.totalUpdate_14 || '')} 
-                          onPercentChange={(v) => handleChange('O', 'percentage_14', v)}
-                          onTotalChange={(v) => handleChange('O', 'totalUpdate_14', v)}
+                          val={String(silos.K.percentage_14 || '')} 
+                          total={String(silos.K.totalUpdate_14 || '')} 
+                          onPercentChange={(v) => handleChange('K', 'percentage_14', v)}
+                          onTotalChange={(v) => handleChange('K', 'totalUpdate_14', v)}
                           getInputClass={getInputClass}
                       />
                        <UpdateRow 
-                          val={String(silos.O.percentage_22 || '')} 
-                          total={String(silos.O.totalUpdate_22 || '')} 
-                          onPercentChange={(v) => handleChange('O', 'percentage_22', v)}
-                          onTotalChange={(v) => handleChange('O', 'totalUpdate_22', v)}
+                          val={String(silos.K.percentage_22 || '')} 
+                          total={String(silos.K.totalUpdate_22 || '')} 
+                          onPercentChange={(v) => handleChange('K', 'percentage_22', v)}
+                          onTotalChange={(v) => handleChange('K', 'totalUpdate_22', v)}
                           getInputClass={getInputClass}
                       />
                   </div>
-                  {/* Silo P Col */}
+                  {/* Silo L Col */}
                   <div className="flex flex-col gap-2">
                        <UpdateRow 
-                          val={String(silos.P.percentage || '')} 
-                          total={String(silos.P.totalUpdate || '')} 
-                          onPercentChange={(v) => handleChange('P', 'percentage', v)}
-                          onTotalChange={(v) => handleChange('P', 'totalUpdate', v)}
+                          val={String(silos.L.percentage || '')} 
+                          total={String(silos.L.totalUpdate || '')} 
+                          onPercentChange={(v) => handleChange('L', 'percentage', v)}
+                          onTotalChange={(v) => handleChange('L', 'totalUpdate', v)}
                           getInputClass={getInputClass}
                       />
                        <UpdateRow 
-                          val={String(silos.P.percentage_14 || '')} 
-                          total={String(silos.P.totalUpdate_14 || '')} 
-                          onPercentChange={(v) => handleChange('P', 'percentage_14', v)}
-                          onTotalChange={(v) => handleChange('P', 'totalUpdate_14', v)}
+                          val={String(silos.L.percentage_14 || '')} 
+                          total={String(silos.L.totalUpdate_14 || '')} 
+                          onPercentChange={(v) => handleChange('L', 'percentage_14', v)}
+                          onTotalChange={(v) => handleChange('L', 'totalUpdate_14', v)}
                           getInputClass={getInputClass}
                       />
                        <UpdateRow 
-                          val={String(silos.P.percentage_22 || '')} 
-                          total={String(silos.P.totalUpdate_22 || '')} 
-                          onPercentChange={(v) => handleChange('P', 'percentage_22', v)}
-                          onTotalChange={(v) => handleChange('P', 'totalUpdate_22', v)}
+                          val={String(silos.L.percentage_22 || '')} 
+                          total={String(silos.L.totalUpdate_22 || '')} 
+                          onPercentChange={(v) => handleChange('L', 'percentage_22', v)}
+                          onTotalChange={(v) => handleChange('L', 'totalUpdate_22', v)}
                           getInputClass={getInputClass}
                       />
                   </div>
-                   {/* Silo Q Col */}
+                   {/* Silo M Col */}
                   <div className="flex flex-col gap-2">
                        <UpdateRow 
-                          val={String(silos.Q.percentage || '')} 
-                          total={String(silos.Q.totalUpdate || '')} 
-                          onPercentChange={(v) => handleChange('Q', 'percentage', v)}
-                          onTotalChange={(v) => handleChange('Q', 'totalUpdate', v)}
+                          val={String(silos.M.percentage || '')} 
+                          total={String(silos.M.totalUpdate || '')} 
+                          onPercentChange={(v) => handleChange('M', 'percentage', v)}
+                          onTotalChange={(v) => handleChange('M', 'totalUpdate', v)}
                           getInputClass={getInputClass}
                       />
                        <UpdateRow 
-                          val={String(silos.Q.percentage_14 || '')} 
-                          total={String(silos.Q.totalUpdate_14 || '')} 
-                          onPercentChange={(v) => handleChange('Q', 'percentage_14', v)}
-                          onTotalChange={(v) => handleChange('Q', 'totalUpdate_14', v)}
+                          val={String(silos.M.percentage_14 || '')} 
+                          total={String(silos.M.totalUpdate_14 || '')} 
+                          onPercentChange={(v) => handleChange('M', 'percentage_14', v)}
+                          onTotalChange={(v) => handleChange('M', 'totalUpdate_14', v)}
                           getInputClass={getInputClass}
                       />
                        <UpdateRow 
-                          val={String(silos.Q.percentage_22 || '')} 
-                          total={String(silos.Q.totalUpdate_22 || '')} 
-                          onPercentChange={(v) => handleChange('Q', 'percentage_22', v)}
-                          onTotalChange={(v) => handleChange('Q', 'totalUpdate_22', v)}
+                          val={String(silos.M.percentage_22 || '')} 
+                          total={String(silos.M.totalUpdate_22 || '')} 
+                          onPercentChange={(v) => handleChange('M', 'percentage_22', v)}
+                          onTotalChange={(v) => handleChange('M', 'totalUpdate_22', v)}
                           getInputClass={getInputClass}
                       />
                   </div>
