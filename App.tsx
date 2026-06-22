@@ -312,7 +312,7 @@ const App: React.FC = () => {
 
   // State for Silo START Confirmation Modal
   const [startSiloData, setStartSiloData] = useState<{
-      id: 'K' | 'L' | 'M';
+      id: 'L' | 'M' | 'N';
       lotNumber: string;
       capacitySet: string;
       startTime: string;
@@ -355,9 +355,9 @@ const App: React.FC = () => {
   const [siloState, setSiloState] = useState<SiloState>({
       activeSilo: null, // No active silo initially
       silos: {
-          K: { id: 'K', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
           L: { id: 'L', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
-          M: { id: 'M', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' }
+          M: { id: 'M', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
+          N: { id: 'N', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' }
       }
   });
   
@@ -640,14 +640,25 @@ const App: React.FC = () => {
           const loaded = { ...settingsData.silo_state };
           if (loaded.silos) {
             const mappedSilos: any = {
-              K: { id: 'K', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
               L: { id: 'L', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
-              M: { id: 'M', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' }
+              M: { id: 'M', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' },
+              N: { id: 'N', lotNumber: '', capacitySet: '', startTime: '', finishTime: '', percentage: '', totalUpdate: '', percentage_14: '', totalUpdate_14: '', percentage_22: '', totalUpdate_22: '' }
             };
-            const mapping: Record<string, string> = { O: 'K', P: 'L', Q: 'M' };
+            
+            const keys = Object.keys(loaded.silos);
+            const hasN = keys.includes('N');
+            let mapping: Record<string, string>;
+            if (hasN) {
+              mapping = { L: 'L', M: 'M', N: 'N' };
+            } else if (keys.includes('K')) {
+              mapping = { K: 'L', L: 'M', M: 'N' };
+            } else {
+              mapping = { O: 'L', P: 'M', Q: 'N' };
+            }
+
             Object.keys(loaded.silos).forEach((key) => {
               const targetKey = mapping[key] || key;
-              if (targetKey === 'K' || targetKey === 'L' || targetKey === 'M') {
+              if (targetKey === 'L' || targetKey === 'M' || targetKey === 'N') {
                 mappedSilos[targetKey] = {
                   ...mappedSilos[targetKey],
                   ...loaded.silos[key],
@@ -658,9 +669,18 @@ const App: React.FC = () => {
             loaded.silos = mappedSilos;
           }
           if (loaded.activeSilo) {
-            const mapping: Record<string, string> = { O: 'K', P: 'L', Q: 'M' };
+            const keys = Object.keys(loaded.silos || {});
+            const hasN = keys.includes('N');
+            let mapping: Record<string, string>;
+            if (hasN) {
+              mapping = { L: 'L', M: 'M', N: 'N' };
+            } else if (keys.includes('K')) {
+              mapping = { K: 'L', L: 'M', M: 'N' };
+            } else {
+              mapping = { O: 'L', P: 'M', Q: 'N' };
+            }
             loaded.activeSilo = mapping[loaded.activeSilo] || loaded.activeSilo;
-            if (loaded.activeSilo !== 'K' && loaded.activeSilo !== 'L' && loaded.activeSilo !== 'M') {
+            if (loaded.activeSilo !== 'L' && loaded.activeSilo !== 'M' && loaded.activeSilo !== 'N') {
               loaded.activeSilo = null;
             }
           }
@@ -1008,7 +1028,7 @@ const App: React.FC = () => {
   // --- Silo Handlers ---
   
   // 1. Initial Click Handler: Opens the Confirmation Modal
-  const handleSiloSwitch = (newSiloId: 'K' | 'L' | 'M') => {
+  const handleSiloSwitch = (newSiloId: 'L' | 'M' | 'N') => {
       if (newSiloId === siloState.activeSilo) return;
 
       const currentTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -1063,7 +1083,7 @@ const App: React.FC = () => {
       setStartSiloData(null);
   };
 
-  const handleSiloDataChange = (siloId: 'K' | 'L' | 'M', field: keyof SiloData, value: any) => {
+  const handleSiloDataChange = (siloId: 'L' | 'M' | 'N', field: keyof SiloData, value: any) => {
       const newSiloState = {
           ...siloState,
           silos: {

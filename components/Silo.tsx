@@ -1,25 +1,97 @@
-
 import React from 'react';
 import { Database, CheckCircle2, Play } from 'lucide-react';
 import { SiloData } from '../types';
 
 interface SiloProps {
-    activeSilo: 'K' | 'L' | 'M' | null;
-    silos: Record<'K' | 'L' | 'M', SiloData>;
-    onDataChange?: (siloId: 'K'|'L'|'M', field: keyof SiloData, value: any) => void;
-    onSiloSelect?: (siloId: 'K'|'L'|'M') => void;
+    activeSilo: 'L' | 'M' | 'N' | null;
+    silos: Record<'L' | 'M' | 'N', SiloData>;
+    onDataChange?: (siloId: 'L'|'M'|'N', field: keyof SiloData, value: any) => void;
+    onSiloSelect?: (siloId: 'L'|'M'|'N') => void;
 }
 
 export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onSiloSelect }) => {
-  
-  // Helper to handle input changes
-  const handleChange = (id: 'K'|'L'|'M', field: keyof SiloData, val: string) => {
-      if (!onDataChange) return;
-      onDataChange(id, field, val);
+  // Local state to prevent input jumping/lag while typing
+  const [localSilos, setLocalSilos] = React.useState<Record<'L'|'M'|'N', SiloData>>(silos);
+
+  // Keep track of which input field has focus so background updates do not overwrite it
+  const [focusedField, setFocusedField] = React.useState<{ siloId: 'L'|'M'|'N'; field: keyof SiloData } | null>(null);
+
+  // Ref container for debounced save values
+  const saveTimers = React.useRef<Record<string, any>>({});
+
+  // Sync prop changes to local state for fields NOT currently focused
+  React.useEffect(() => {
+    setLocalSilos((prev) => {
+      const next = { ...prev };
+      (['L', 'M', 'N'] as const).forEach((id) => {
+        next[id] = { ...next[id] };
+        const propSilo = silos[id];
+        if (propSilo) {
+          Object.keys(propSilo).forEach((key) => {
+            const field = key as keyof SiloData;
+            // Never overwrite the value if the operator is actively typing/focusing this input field
+            if (focusedField?.siloId === id && focusedField?.field === field) {
+              return;
+            }
+            (next[id] as any)[field] = propSilo[field];
+          });
+        }
+      });
+      return next;
+    });
+  }, [silos, focusedField]);
+
+  // Clean up timers on unmount
+  React.useEffect(() => {
+    return () => {
+      Object.values(saveTimers.current).forEach((t) => clearTimeout(t as any));
+    };
+  }, []);
+
+  // Handle immediate local changes + debounced database saves
+  const handleChange = (id: 'L'|'M'|'N', field: keyof SiloData, val: string) => {
+    // 1. Immediately update local state to be extremely snappy
+    setLocalSilos((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        [field]: val
+      }
+    }));
+
+    // 2. Clear any active debounce timer for this field and restart it
+    const timerKey = `${id}-${field}`;
+    if (saveTimers.current[timerKey]) {
+      clearTimeout(saveTimers.current[timerKey]);
+    }
+    
+    saveTimers.current[timerKey] = setTimeout(() => {
+      if (onDataChange) {
+        onDataChange(id, field, val);
+      }
+    }, 1500); // 1.5 seconds debounce for casual keystrokes
+  };
+
+  // Focus tracking helper
+  const handleFocus = (id: 'L'|'M'|'N', field: keyof SiloData) => {
+    setFocusedField({ siloId: id, field });
+  };
+
+  // Blur helper to immediately flushing the value to the database
+  const handleBlur = (id: 'L'|'M'|'N', field: keyof SiloData, currentVal: any) => {
+    setFocusedField(null);
+    const timerKey = `${id}-${field}`;
+    if (saveTimers.current[timerKey]) {
+      clearTimeout(saveTimers.current[timerKey]);
+      delete saveTimers.current[timerKey];
+    }
+    if (onDataChange) {
+      onDataChange(id, field, currentVal);
+    }
   };
 
   // Helper for conditional styling for Columns
-  const getColumnClass = (siloId: 'K'|'L'|'M') => {
+  const getColumnClass = (siloId: 'L'|'M'|'N') => {
       if (activeSilo === siloId) {
           return "bg-emerald-100/50 border-emerald-500/50";
       }
@@ -27,7 +99,7 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
   };
 
   // Helper for conditional styling for Headers
-  const getHeaderClass = (siloId: 'K'|'L'|'M') => {
+  const getHeaderClass = (siloId: 'L'|'M'|'N') => {
       if (activeSilo === siloId) {
           return "bg-emerald-600 ring-inset ring-4 ring-yellow-400 z-10 scale-105 shadow-xl opacity-100";
       }
@@ -57,7 +129,7 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                 <h2 className="text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight">Silo Monitor</h2>
                 <div className="flex items-center gap-3 mt-1">
                     <p className="text-slate-500 dark:text-slate-400 font-semibold uppercase text-sm tracking-widest">Storage & Distribution</p>
-                    <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700 uppercase">K - L - M Control</span>
+                    <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700 uppercase">L - M - N Control</span>
                 </div>
             </div>
           </div>
@@ -78,7 +150,7 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                   <thead>
                       <tr>
                           <th className="border-b-2 border-slate-100 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-800/30 text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em] text-xs font-bold">PARAMETER</th>
-                          {['K', 'L', 'M'].map((id) => (
+                          {['L', 'M', 'N'].map((id) => (
                               <th key={`head-${id}`} className={`border-b-2 border-slate-100 dark:border-slate-800 p-4 uppercase tracking-[0.2em] text-3xl font-black ${activeSilo === id ? 'bg-cyan-500 text-white' : 'bg-slate-50/50 dark:bg-slate-800/30 text-slate-800 dark:text-slate-200'}`}>
                                   SILO {id}
                               </th>
@@ -89,22 +161,22 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                       {/* ACTION Row */}
                       <tr className="border-b border-slate-100 dark:border-slate-800/50">
                           <td className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 bg-slate-50/30 dark:bg-slate-800/10">STATUS</td>
-                          {['K', 'L', 'M'].map((siloId) => (
+                          {['L', 'M', 'N'].map((siloId) => (
                               <td key={`action-${siloId}`} className="p-4">
                                    {activeSilo === siloId ? (
-                                       <div className="w-full flex items-center justify-center gap-2 bg-emerald-500 text-white px-4 py-4 rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20">
-                                           <CheckCircle2 className="w-5 h-5" />
-                                           CHARGING
-                                       </div>
-                                   ) : (
-                                       <button 
-                                          onClick={() => onSiloSelect && onSiloSelect(siloId as 'K'|'L'|'M')}
-                                          className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-cyan-50 dark:bg-slate-800 dark:hover:bg-cyan-900/20 text-slate-500 hover:text-cyan-600 dark:hover:text-cyan-400 px-4 py-4 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 hover:border-cyan-300 transition-all uppercase tracking-wider"
-                                       >
-                                           <Play className="w-4 h-4" />
-                                           SELECT
-                                       </button>
-                                   )}
+                                        <div className="w-full flex items-center justify-center gap-2 bg-emerald-500 text-white px-4 py-4 rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20">
+                                            <CheckCircle2 className="w-5 h-5" />
+                                            CHARGING
+                                        </div>
+                                    ) : (
+                                        <button 
+                                           onClick={() => onSiloSelect && onSiloSelect(siloId as 'L'|'M'|'N')}
+                                           className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-cyan-50 dark:bg-slate-800 dark:hover:bg-cyan-900/20 text-slate-500 hover:text-cyan-600 dark:hover:text-cyan-400 px-4 py-4 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 hover:border-cyan-300 transition-all uppercase tracking-wider"
+                                        >
+                                            <Play className="w-4 h-4" />
+                                            SELECT
+                                        </button>
+                                    )}
                               </td>
                           ))}
                       </tr>
@@ -112,12 +184,14 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                       {/* Lot Number Row */}
                       <tr className="border-b border-slate-100 dark:border-slate-800/50">
                           <td className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 bg-slate-50/30 dark:bg-slate-800/10">LOT NUMBER</td>
-                          {['K', 'L', 'M'].map((id) => (
+                          {['L', 'M', 'N'].map((id) => (
                               <td key={`lot-${id}`} className="p-4">
                                   <input 
                                       type="text" 
-                                      value={silos[id as 'K'|'L'|'M'].lotNumber} 
-                                      onChange={(e) => handleChange(id as 'K'|'L'|'M', 'lotNumber', e.target.value)}
+                                      value={localSilos[id as 'L'|'M'|'N'].lotNumber} 
+                                      onFocus={() => handleFocus(id as 'L'|'M'|'N', 'lotNumber')}
+                                      onBlur={(e) => handleBlur(id as 'L'|'M'|'N', 'lotNumber', e.target.value)}
+                                      onChange={(e) => handleChange(id as 'L'|'M'|'N', 'lotNumber', e.target.value)}
                                       className="w-full bg-violet-50 dark:bg-violet-900/20 border-none rounded-xl p-4 text-xl font-black text-center text-slate-900 dark:text-white focus:ring-4 focus:ring-violet-500/20 transition-all"
                                       placeholder="---"
                                   />
@@ -128,12 +202,14 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                       {/* Set Row */}
                       <tr className="border-b border-slate-100 dark:border-slate-800/50">
                           <td className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 bg-slate-50/30 dark:bg-slate-800/10">CAPACITY (T)</td>
-                          {['K', 'L', 'M'].map((id) => (
+                          {['L', 'M', 'N'].map((id) => (
                               <td key={`set-${id}`} className="p-4">
                                   <input 
                                       type="number" 
-                                      value={silos[id as 'K'|'L'|'M'].capacitySet} 
-                                      onChange={(e) => handleChange(id as 'K'|'L'|'M', 'capacitySet', e.target.value)}
+                                      value={localSilos[id as 'L'|'M'|'N'].capacitySet} 
+                                      onFocus={() => handleFocus(id as 'L'|'M'|'N', 'capacitySet')}
+                                      onBlur={(e) => handleBlur(id as 'L'|'M'|'N', 'capacitySet', e.target.value)}
+                                      onChange={(e) => handleChange(id as 'L'|'M'|'N', 'capacitySet', e.target.value)}
                                       className="w-full bg-violet-50 dark:bg-violet-900/20 border-none rounded-xl p-4 text-4xl font-black text-center text-cyan-600 dark:text-cyan-400 focus:ring-4 focus:ring-violet-500/20 transition-all"
                                       placeholder="0"
                                   /> 
@@ -144,13 +220,15 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                       {/* Start Row */}
                       <tr className="border-b border-slate-100 dark:border-slate-800/50">
                           <td className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 bg-slate-50/30 dark:bg-slate-800/10">START TIME</td>
-                          {['K', 'L', 'M'].map((id) => (
+                          {['L', 'M', 'N'].map((id) => (
                               <td key={`start-${id}`} className="p-4">
                                   <input 
                                       type="text"
                                       placeholder="00:00" 
-                                      value={silos[id as 'K'|'L'|'M'].startTime || ''}
-                                      onChange={(e) => handleChange(id as 'K'|'L'|'M', 'startTime', e.target.value)}
+                                      value={localSilos[id as 'L'|'M'|'N'].startTime || ''}
+                                      onFocus={() => handleFocus(id as 'L'|'M'|'N', 'startTime')}
+                                      onBlur={(e) => handleBlur(id as 'L'|'M'|'N', 'startTime', e.target.value)}
+                                      onChange={(e) => handleChange(id as 'L'|'M'|'N', 'startTime', e.target.value)}
                                       className="w-full bg-violet-50 dark:bg-violet-900/20 border-none rounded-xl p-4 text-xl font-black text-center text-slate-900 dark:text-white focus:ring-4 focus:ring-violet-500/20 transition-all"
                                   />
                               </td>
@@ -160,13 +238,15 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                        {/* Finish Row */}
                       <tr>
                           <td className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 bg-slate-50/30 dark:bg-slate-800/10">FINISH TIME</td>
-                          {['K', 'L', 'M'].map((id) => (
+                          {['L', 'M', 'N'].map((id) => (
                               <td key={`finish-${id}`} className="p-4">
                                   <input 
                                       type="text" 
                                       placeholder="00:00"
-                                      value={silos[id as 'K'|'L'|'M'].finishTime || ''}
-                                      onChange={(e) => handleChange(id as 'K'|'L'|'M', 'finishTime', e.target.value)}
+                                      value={localSilos[id as 'L'|'M'|'N'].finishTime || ''}
+                                      onFocus={() => handleFocus(id as 'L'|'M'|'N', 'finishTime')}
+                                      onBlur={(e) => handleBlur(id as 'L'|'M'|'N', 'finishTime', e.target.value)}
+                                      onChange={(e) => handleChange(id as 'L'|'M'|'N', 'finishTime', e.target.value)}
                                       className="w-full bg-violet-50 dark:bg-violet-900/20 border-none rounded-xl p-4 text-xl font-black text-center text-rose-600 dark:text-rose-400 focus:ring-4 focus:ring-violet-500/20 transition-all"
                                   />
                               </td>
@@ -190,75 +270,111 @@ export const Silo: React.FC<SiloProps> = ({ activeSilo, silos, onDataChange, onS
                           </div>
                       ))}
                   </div>
-                  {/* Silo K Col */}
-                  <div className="flex flex-col gap-2">
-                       <UpdateRow 
-                          val={String(silos.K.percentage || '')} 
-                          total={String(silos.K.totalUpdate || '')} 
-                          onPercentChange={(v) => handleChange('K', 'percentage', v)}
-                          onTotalChange={(v) => handleChange('K', 'totalUpdate', v)}
-                          getInputClass={getInputClass}
-                      />
-                       <UpdateRow 
-                          val={String(silos.K.percentage_14 || '')} 
-                          total={String(silos.K.totalUpdate_14 || '')} 
-                          onPercentChange={(v) => handleChange('K', 'percentage_14', v)}
-                          onTotalChange={(v) => handleChange('K', 'totalUpdate_14', v)}
-                          getInputClass={getInputClass}
-                      />
-                       <UpdateRow 
-                          val={String(silos.K.percentage_22 || '')} 
-                          total={String(silos.K.totalUpdate_22 || '')} 
-                          onPercentChange={(v) => handleChange('K', 'percentage_22', v)}
-                          onTotalChange={(v) => handleChange('K', 'totalUpdate_22', v)}
-                          getInputClass={getInputClass}
-                      />
-                  </div>
                   {/* Silo L Col */}
                   <div className="flex flex-col gap-2">
                        <UpdateRow 
-                          val={String(silos.L.percentage || '')} 
-                          total={String(silos.L.totalUpdate || '')} 
+                          val={String(localSilos.L.percentage || '')} 
+                          total={String(localSilos.L.totalUpdate || '')} 
                           onPercentChange={(v) => handleChange('L', 'percentage', v)}
                           onTotalChange={(v) => handleChange('L', 'totalUpdate', v)}
+                          onPercentFocus={() => handleFocus('L', 'percentage')}
+                          onPercentBlur={() => handleBlur('L', 'percentage', localSilos.L.percentage)}
+                          onTotalFocus={() => handleFocus('L', 'totalUpdate')}
+                          onTotalBlur={() => handleBlur('L', 'totalUpdate', localSilos.L.totalUpdate)}
                           getInputClass={getInputClass}
                       />
                        <UpdateRow 
-                          val={String(silos.L.percentage_14 || '')} 
-                          total={String(silos.L.totalUpdate_14 || '')} 
+                          val={String(localSilos.L.percentage_14 || '')} 
+                          total={String(localSilos.L.totalUpdate_14 || '')} 
                           onPercentChange={(v) => handleChange('L', 'percentage_14', v)}
                           onTotalChange={(v) => handleChange('L', 'totalUpdate_14', v)}
+                          onPercentFocus={() => handleFocus('L', 'percentage_14')}
+                          onPercentBlur={() => handleBlur('L', 'percentage_14', localSilos.L.percentage_14)}
+                          onTotalFocus={() => handleFocus('L', 'totalUpdate_14')}
+                          onTotalBlur={() => handleBlur('L', 'totalUpdate_14', localSilos.L.totalUpdate_14)}
                           getInputClass={getInputClass}
                       />
                        <UpdateRow 
-                          val={String(silos.L.percentage_22 || '')} 
-                          total={String(silos.L.totalUpdate_22 || '')} 
+                          val={String(localSilos.L.percentage_22 || '')} 
+                          total={String(localSilos.L.totalUpdate_22 || '')} 
                           onPercentChange={(v) => handleChange('L', 'percentage_22', v)}
                           onTotalChange={(v) => handleChange('L', 'totalUpdate_22', v)}
+                          onPercentFocus={() => handleFocus('L', 'percentage_22')}
+                          onPercentBlur={() => handleBlur('L', 'percentage_22', localSilos.L.percentage_22)}
+                          onTotalFocus={() => handleFocus('L', 'totalUpdate_22')}
+                          onTotalBlur={() => handleBlur('L', 'totalUpdate_22', localSilos.L.totalUpdate_22)}
                           getInputClass={getInputClass}
                       />
                   </div>
-                   {/* Silo M Col */}
+                  {/* Silo M Col */}
                   <div className="flex flex-col gap-2">
                        <UpdateRow 
-                          val={String(silos.M.percentage || '')} 
-                          total={String(silos.M.totalUpdate || '')} 
+                          val={String(localSilos.M.percentage || '')} 
+                          total={String(localSilos.M.totalUpdate || '')} 
                           onPercentChange={(v) => handleChange('M', 'percentage', v)}
                           onTotalChange={(v) => handleChange('M', 'totalUpdate', v)}
+                          onPercentFocus={() => handleFocus('M', 'percentage')}
+                          onPercentBlur={() => handleBlur('M', 'percentage', localSilos.M.percentage)}
+                          onTotalFocus={() => handleFocus('M', 'totalUpdate')}
+                          onTotalBlur={() => handleBlur('M', 'totalUpdate', localSilos.M.totalUpdate)}
                           getInputClass={getInputClass}
                       />
                        <UpdateRow 
-                          val={String(silos.M.percentage_14 || '')} 
-                          total={String(silos.M.totalUpdate_14 || '')} 
+                          val={String(localSilos.M.percentage_14 || '')} 
+                          total={String(localSilos.M.totalUpdate_14 || '')} 
                           onPercentChange={(v) => handleChange('M', 'percentage_14', v)}
                           onTotalChange={(v) => handleChange('M', 'totalUpdate_14', v)}
+                          onPercentFocus={() => handleFocus('M', 'percentage_14')}
+                          onPercentBlur={() => handleBlur('M', 'percentage_14', localSilos.M.percentage_14)}
+                          onTotalFocus={() => handleFocus('M', 'totalUpdate_14')}
+                          onTotalBlur={() => handleBlur('M', 'totalUpdate_14', localSilos.M.totalUpdate_14)}
                           getInputClass={getInputClass}
                       />
                        <UpdateRow 
-                          val={String(silos.M.percentage_22 || '')} 
-                          total={String(silos.M.totalUpdate_22 || '')} 
+                          val={String(localSilos.M.percentage_22 || '')} 
+                          total={String(localSilos.M.totalUpdate_22 || '')} 
                           onPercentChange={(v) => handleChange('M', 'percentage_22', v)}
                           onTotalChange={(v) => handleChange('M', 'totalUpdate_22', v)}
+                          onPercentFocus={() => handleFocus('M', 'percentage_22')}
+                          onPercentBlur={() => handleBlur('M', 'percentage_22', localSilos.M.percentage_22)}
+                          onTotalFocus={() => handleFocus('M', 'totalUpdate_22')}
+                          onTotalBlur={() => handleBlur('M', 'totalUpdate_22', localSilos.M.totalUpdate_22)}
+                          getInputClass={getInputClass}
+                      />
+                  </div>
+                   {/* Silo N Col */}
+                  <div className="flex flex-col gap-2">
+                       <UpdateRow 
+                          val={String(localSilos.N.percentage || '')} 
+                          total={String(localSilos.N.totalUpdate || '')} 
+                          onPercentChange={(v) => handleChange('N', 'percentage', v)}
+                          onTotalChange={(v) => handleChange('N', 'totalUpdate', v)}
+                          onPercentFocus={() => handleFocus('N', 'percentage')}
+                          onPercentBlur={() => handleBlur('N', 'percentage', localSilos.N.percentage)}
+                          onTotalFocus={() => handleFocus('N', 'totalUpdate')}
+                          onTotalBlur={() => handleBlur('N', 'totalUpdate', localSilos.N.totalUpdate)}
+                          getInputClass={getInputClass}
+                      />
+                       <UpdateRow 
+                          val={String(localSilos.N.percentage_14 || '')} 
+                          total={String(localSilos.N.totalUpdate_14 || '')} 
+                          onPercentChange={(v) => handleChange('N', 'percentage_14', v)}
+                          onTotalChange={(v) => handleChange('N', 'totalUpdate_14', v)}
+                          onPercentFocus={() => handleFocus('N', 'percentage_14')}
+                          onPercentBlur={() => handleBlur('N', 'percentage_14', localSilos.N.percentage_14)}
+                          onTotalFocus={() => handleFocus('N', 'totalUpdate_14')}
+                          onTotalBlur={() => handleBlur('N', 'totalUpdate_14', localSilos.N.totalUpdate_14)}
+                          getInputClass={getInputClass}
+                      />
+                       <UpdateRow 
+                          val={String(localSilos.N.percentage_22 || '')} 
+                          total={String(localSilos.N.totalUpdate_22 || '')} 
+                          onPercentChange={(v) => handleChange('N', 'percentage_22', v)}
+                          onTotalChange={(v) => handleChange('N', 'totalUpdate_22', v)}
+                          onPercentFocus={() => handleFocus('N', 'percentage_22')}
+                          onPercentBlur={() => handleBlur('N', 'percentage_22', localSilos.N.percentage_22)}
+                          onTotalFocus={() => handleFocus('N', 'totalUpdate_22')}
+                          onTotalBlur={() => handleBlur('N', 'totalUpdate_22', localSilos.N.totalUpdate_22)}
                           getInputClass={getInputClass}
                       />
                   </div>
@@ -277,17 +393,33 @@ interface UpdateRowProps {
     isHash?: boolean;
     onPercentChange?: (v: string) => void;
     onTotalChange?: (v: string) => void;
+    onPercentFocus?: () => void;
+    onPercentBlur?: () => void;
+    onTotalFocus?: () => void;
+    onTotalBlur?: () => void;
     getInputClass: (val: any, color?: string) => string;
 }
 
-const UpdateRow = ({val, total, isEmpty, onPercentChange, onTotalChange}: UpdateRowProps) => (
-    <div className={`h-[80px] flex items-center border-b border-slate-100 dark:border-slate-800/50 last:border-b-0 p-3 gap-3 ${isEmpty ? 'opacity-20' : ''}`}>
+const UpdateRow = ({
+  val, 
+  total, 
+  isEmpty, 
+  onPercentChange, 
+  onTotalChange,
+  onPercentFocus,
+  onPercentBlur,
+  onTotalFocus,
+  onTotalBlur
+}: UpdateRowProps) => (
+    <div className="h-[80px] flex items-center border-b border-slate-100 dark:border-slate-800/50 last:border-b-0 p-3 gap-3">
         <div className="w-20 h-full relative">
             {!isEmpty && (
                 <>
                     <input 
                         type="number" 
                         value={val} 
+                        onFocus={onPercentFocus}
+                        onBlur={onPercentBlur}
                         onChange={(e) => onPercentChange && onPercentChange(e.target.value)}
                         className="w-full h-full bg-cyan-50 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-400 rounded-xl text-center font-black text-xl outline-none focus:ring-2 focus:ring-cyan-500 transition-all"
                         placeholder="0"
@@ -302,6 +434,8 @@ const UpdateRow = ({val, total, isEmpty, onPercentChange, onTotalChange}: Update
                     <input 
                         type="number" 
                         value={total} 
+                        onFocus={onTotalFocus}
+                        onBlur={onTotalBlur}
                         onChange={(e) => onTotalChange && onTotalChange(e.target.value)}
                         className="w-full h-full bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl text-center font-black text-xl outline-none focus:ring-2 focus:ring-cyan-500 transition-all"
                         placeholder="0.0"

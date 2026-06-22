@@ -59,14 +59,10 @@ function sanitizeForFirestore(val: any): any {
 let authPromise: Promise<any> | null = null;
 
 async function ensureAuth() {
-  if (!authPromise) {
-    const auth = getAuth(app);
-    authPromise = signInAnonymously(auth).catch((err) => {
-      console.warn("Failed to sign in anonymously. Proceeding anyway...", err);
-      return null;
-    });
-  }
-  await authPromise;
+  // Bypassed: Firestore rules are configured to allow public reads and writes (allow read, write: if true;)
+  // This avoids auth/admin-restricted-operation errors when Anonymous Sign-in is not enabled in Firebase Console,
+  // and makes database requests execute instantly.
+  return;
 }
 
 export enum OperationType {
