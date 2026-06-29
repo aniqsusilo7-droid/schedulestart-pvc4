@@ -20,5 +20,10 @@ service cloud.firestore {
     match /reactor_notes/{id} {
       allow read, write: if true;
     }
+
+    // Kesepakatan operasional dan aturan shift
+    match /kesepakatan/{id} {
+      allow read, write: if true;
+    }
   }
 }

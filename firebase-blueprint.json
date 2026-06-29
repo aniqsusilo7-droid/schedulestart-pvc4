@@ -10,7 +10,24 @@
           "description": "Unique identifier of the configuration doc."
         },
         "alarm_sound": {
-          "type": "string"
+          "type": "string",
+          "description": "Selected alarm sound type. Options: siren, train, car_horn, ship_horn, ringtone, jet, missile, rocket, powerpoint, bomb, fajar_sadboy"
+        },
+        "cycle_time_data": {
+          "type": "array",
+          "description": "Cycle time table data"
+        },
+        "silo_state": {
+          "type": "object",
+          "description": "State of silos"
+        },
+        "catalyst_data": {
+          "type": "object",
+          "description": "Catalyst formulation data"
+        },
+        "demonomer_data": {
+          "type": "object",
+          "description": "Demonomer values"
         },
         "audio_enabled": {
           "type": "boolean"
@@ -96,6 +113,30 @@
         }
       },
       "required": ["reactor_id", "note"]
+    },
+    "Kesepakatan": {
+      "title": "Kesepakatan",
+      "description": "Aturan Mode Pengoperasian dan Pembagian Shift Schedule PVC",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the kesepakatan document."
+        },
+        "shifts": {
+          "type": "array"
+        },
+        "additionalNotes": {
+          "type": "array"
+        },
+        "footerNote": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "required": ["id"]
     }
   },
   "firestore": {
@@ -110,6 +151,10 @@
     "/reactor_notes/{id}": {
       "schema": "ReactorNote",
       "description": "Operator notes for each reactor."
+    },
+    "/kesepakatan/{id}": {
+      "schema": "Kesepakatan",
+      "description": "Aturan Mode Pengoperasian dan Pembagian Shift Schedule PVC"
     }
   }
 }

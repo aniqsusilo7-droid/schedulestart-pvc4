@@ -1,6 +1,6 @@
 
 export type GradeType = 'SM' | 'SLK' | 'SLP' | 'SE' | 'SR';
-export type AlarmSoundType = 'siren' | 'rocket' | 'jet' | 'powerpoint' | 'bomb' | 'fajar_sadboy';
+export type AlarmSoundType = 'siren' | 'rocket' | 'jet' | 'powerpoint' | 'bomb' | 'fajar_sadboy' | 'train' | 'car_horn' | 'ship_horn' | 'ringtone' | 'missile';
 
 export interface ReactorConfig {
   id: string;
@@ -93,3 +93,18 @@ export interface DemonomerData {
   steamFormula: string;
   cycleTimeFormula: string;
 }
+
+export interface Shift {
+  name: string;
+  time: string;
+  closeMode: string;
+  openMode: string;
+}
+
+export interface KesepakatanData {
+  id?: string;
+  shifts: Shift[];
+  additionalNotes: string[];
+  footerNote: string;
+}
+

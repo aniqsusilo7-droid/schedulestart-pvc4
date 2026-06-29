@@ -6,6 +6,7 @@ import { addMinutes, formatDate, formatTime, getBatchDate } from './utils/dateUt
 import { Clock } from './components/Clock';
 import { Demonomer } from './components/Demonomer';
 import { Silo } from './components/Silo';
+import { Kesepakatan } from './components/Kesepakatan';
 import { Settings, RefreshCw, AlertTriangle, Calendar, Hash, Volume2, VolumeX, Edit3, X, PlayCircle, Clock as ClockIcon, FileText, Ban, FastForward, PauseCircle, ArrowRightCircle, CheckCircle2, Wrench, RotateCcw, Power, Bell, Timer, ChevronDown, Info, Tag, ArrowRight, LayoutGrid, Activity, Database, Type, Sun, Moon, Pause, Play, Save, Gauge, Move, ArrowUp, ArrowDown, Palette, ZoomIn, ZoomOut, Monitor, Maximize2, Check, Calculator, StickyNote, Handshake, Trash2 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { Reorder, motion } from 'framer-motion';
@@ -278,6 +279,267 @@ const playAlarmSound = (type: AlarmSoundType) => {
                 gainNode.connect(noiseCtx.destination);
                 noise.start(nt);
             }, 1000);
+        } else if (type === 'train') {
+            // Train steam chug-chug + whistle
+            const whistleOsc1 = ctx.createOscillator();
+            const whistleOsc2 = ctx.createOscillator();
+            const whistleGain = ctx.createGain();
+            
+            whistleOsc1.type = 'sawtooth';
+            whistleOsc2.type = 'sawtooth';
+            
+            whistleOsc1.frequency.setValueAtTime(580, t);
+            whistleOsc2.frequency.setValueAtTime(770, t);
+            
+            whistleGain.gain.setValueAtTime(0, t);
+            // Blow horn twice: 0.2s - 2.5s, and 3.5s - 6s
+            whistleGain.gain.linearRampToValueAtTime(0.4, t + 0.3);
+            whistleGain.gain.setValueAtTime(0.4, t + 2.3);
+            whistleGain.gain.linearRampToValueAtTime(0, t + 2.5);
+            
+            whistleGain.gain.linearRampToValueAtTime(0.4, t + 3.7);
+            whistleGain.gain.setValueAtTime(0.4, t + 5.8);
+            whistleGain.gain.linearRampToValueAtTime(0, t + 6.0);
+            
+            const lowpass = ctx.createBiquadFilter();
+            lowpass.type = 'lowpass';
+            lowpass.frequency.setValueAtTime(1200, t);
+            
+            whistleOsc1.connect(lowpass);
+            whistleOsc2.connect(lowpass);
+            lowpass.connect(whistleGain);
+            whistleGain.connect(ctx.destination);
+            
+            whistleOsc1.start(t);
+            whistleOsc2.start(t);
+            whistleOsc1.stop(t + 7);
+            whistleOsc2.stop(t + 7);
+            
+            // Train chug noise sequence
+            const bufferSize = ctx.sampleRate * 1.5;
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            
+            // Schedule repetitive "chug chug chug"
+            for (let delay = 0; delay < 12; delay += 0.5) {
+                const chugSource = ctx.createBufferSource();
+                chugSource.buffer = buffer;
+                
+                const chugFilter = ctx.createBiquadFilter();
+                chugFilter.type = 'bandpass';
+                chugFilter.frequency.setValueAtTime(200, t + delay);
+                chugFilter.Q.setValueAtTime(5, t + delay);
+                
+                const chugGain = ctx.createGain();
+                chugGain.gain.setValueAtTime(0.2, t + delay);
+                chugGain.gain.exponentialRampToValueAtTime(0.01, t + delay + 0.3);
+                
+                chugSource.connect(chugFilter);
+                chugFilter.connect(chugGain);
+                chugGain.connect(ctx.destination);
+                
+                chugSource.start(t + delay);
+                chugSource.stop(t + delay + 0.4);
+            }
+        } else if (type === 'car_horn') {
+            // Repetitive car horn: "honk! honk! ... honk! honk!"
+            const honkTimings = [0, 0.5, 1.5, 2.0, 3.0, 3.5, 4.5, 5.0, 6.0, 6.5, 7.5, 8.0];
+            honkTimings.forEach((delay) => {
+                const honkTime = t + delay;
+                if (honkTime >= t + duration) return;
+
+                const osc1 = ctx.createOscillator();
+                const osc2 = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+
+                osc1.type = 'triangle';
+                osc2.type = 'sawtooth';
+
+                osc1.frequency.setValueAtTime(400, honkTime);
+                osc2.frequency.setValueAtTime(480, honkTime);
+
+                gainNode.gain.setValueAtTime(0, honkTime);
+                gainNode.gain.linearRampToValueAtTime(0.4, honkTime + 0.05);
+                gainNode.gain.setValueAtTime(0.4, honkTime + 0.3);
+                gainNode.gain.linearRampToValueAtTime(0, honkTime + 0.35);
+
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(1500, honkTime);
+
+                osc1.connect(filter);
+                osc2.connect(filter);
+                filter.connect(gainNode);
+                gainNode.connect(ctx.destination);
+
+                osc1.start(honkTime);
+                osc2.start(honkTime);
+                osc1.stop(honkTime + 0.4);
+                osc2.stop(honkTime + 0.4);
+            });
+        } else if (type === 'ship_horn') {
+            // Deep ship foghorn sound: "booooooo... booooooo..."
+            const foghornTimings = [0, 4.0, 8.0];
+            foghornTimings.forEach((delay) => {
+                const hornTime = t + delay;
+                if (hornTime >= t + duration) return;
+
+                const osc1 = ctx.createOscillator();
+                const osc2 = ctx.createOscillator();
+                const subOsc = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+
+                osc1.type = 'sawtooth';
+                osc2.type = 'sawtooth';
+                subOsc.type = 'sine';
+
+                osc1.frequency.setValueAtTime(70, hornTime);
+                osc2.frequency.setValueAtTime(105, hornTime); // perfect fifth harmonic
+                subOsc.frequency.setValueAtTime(35, hornTime); // deep sub-bass
+
+                gainNode.gain.setValueAtTime(0, hornTime);
+                gainNode.gain.linearRampToValueAtTime(0.8, hornTime + 0.5);
+                gainNode.gain.setValueAtTime(0.8, hornTime + 3.0);
+                gainNode.gain.linearRampToValueAtTime(0, hornTime + 3.5);
+
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(300, hornTime); // muffled underwater quality
+                filter.Q.setValueAtTime(3, hornTime);
+
+                osc1.connect(filter);
+                osc2.connect(filter);
+                subOsc.connect(gainNode);
+                filter.connect(gainNode);
+                gainNode.connect(ctx.destination);
+
+                osc1.start(hornTime);
+                osc2.start(hornTime);
+                subOsc.start(hornTime);
+                osc1.stop(hornTime + 3.6);
+                osc2.stop(hornTime + 3.6);
+                subOsc.stop(hornTime + 3.6);
+            });
+        } else if (type === 'ringtone') {
+            // Retro digital phone ringtone "rinnggg rinnggg"
+            for (let loop = 0; loop < 4; loop++) {
+                const loopTime = t + loop * 3.0;
+                if (loopTime >= t + duration) break;
+                
+                // Two quick pulses per ring cycle
+                const pulseTimings = [0, 0.4];
+                pulseTimings.forEach((pulseDelay) => {
+                    const pulseTime = loopTime + pulseDelay;
+                    
+                    const osc1 = ctx.createOscillator();
+                    const osc2 = ctx.createOscillator();
+                    const ringGain = ctx.createGain();
+                    
+                    osc1.type = 'sine';
+                    osc2.type = 'sine';
+                    
+                    // Old school mechanical bells are around 850Hz and 1000Hz, modulated rapidly
+                    osc1.frequency.setValueAtTime(850, pulseTime);
+                    osc2.frequency.setValueAtTime(1000, pulseTime);
+                    
+                    // Modulate pitch rapidly for the bell rattle effect
+                    const modulator = ctx.createOscillator();
+                    const modGain = ctx.createGain();
+                    modulator.frequency.value = 25; // 25 Hz ring modulation
+                    modGain.gain.value = 150; // frequency deviation
+                    
+                    modulator.connect(modGain);
+                    modGain.connect(osc1.frequency);
+                    modGain.connect(osc2.frequency);
+                    
+                    ringGain.gain.setValueAtTime(0, pulseTime);
+                    ringGain.gain.linearRampToValueAtTime(0.3, pulseTime + 0.02);
+                    ringGain.gain.setValueAtTime(0.3, pulseTime + 0.25);
+                    ringGain.gain.exponentialRampToValueAtTime(0.01, pulseTime + 0.35);
+                    
+                    osc1.connect(ringGain);
+                    osc2.connect(ringGain);
+                    ringGain.connect(ctx.destination);
+                    
+                    modulator.start(pulseTime);
+                    osc1.start(pulseTime);
+                    osc2.start(pulseTime);
+                    
+                    modulator.stop(pulseTime + 0.4);
+                    osc1.stop(pulseTime + 0.4);
+                    osc2.stop(pulseTime + 0.4);
+                });
+            }
+        } else if (type === 'missile') {
+            // Missile firing screech and explosion
+            const osc = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            
+            osc.type = 'sawtooth';
+            // Start at a very high frequency and drop rapidly to simulate Doppler effect of missile flyby
+            osc.frequency.setValueAtTime(1200, t);
+            osc.frequency.exponentialRampToValueAtTime(80, t + 2.5);
+            
+            gainNode.gain.setValueAtTime(0, t);
+            gainNode.gain.linearRampToValueAtTime(0.4, t + 0.2);
+            gainNode.gain.linearRampToValueAtTime(0.1, t + 2.5);
+            gainNode.gain.linearRampToValueAtTime(0, t + 2.7);
+            
+            osc.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            
+            osc.start(t);
+            osc.stop(t + 2.8);
+            
+            // Explosion sound at t = 2.5s
+            setTimeout(() => {
+                const explCtx = initAudioContext();
+                if (!explCtx) return;
+                const et = explCtx.currentTime;
+                
+                // Low rumble oscillator
+                const rumble = explCtx.createOscillator();
+                const rumbleGain = explCtx.createGain();
+                rumble.type = 'triangle';
+                rumble.frequency.setValueAtTime(100, et);
+                rumble.frequency.exponentialRampToValueAtTime(10, et + 1.5);
+                
+                rumbleGain.gain.setValueAtTime(0.6, et);
+                rumbleGain.gain.exponentialRampToValueAtTime(0.01, et + 1.5);
+                
+                rumble.connect(rumbleGain);
+                rumbleGain.connect(explCtx.destination);
+                rumble.start(et);
+                rumble.stop(et + 1.6);
+                
+                // Noise blast
+                const bufferSize = explCtx.sampleRate * 2.0;
+                const buffer = explCtx.createBuffer(1, bufferSize, explCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const blast = explCtx.createBufferSource();
+                blast.buffer = buffer;
+                
+                const blastFilter = explCtx.createBiquadFilter();
+                blastFilter.type = 'lowpass';
+                blastFilter.frequency.setValueAtTime(400, et);
+                blastFilter.frequency.exponentialRampToValueAtTime(50, et + 2.0);
+                
+                const blastGain = explCtx.createGain();
+                blastGain.gain.setValueAtTime(0.8, et);
+                blastGain.gain.exponentialRampToValueAtTime(0.01, et + 2.0);
+                
+                blast.connect(blastFilter);
+                blastFilter.connect(blastGain);
+                blastGain.connect(explCtx.destination);
+                blast.start(et);
+                blast.stop(et + 2.1);
+            }, 2500);
         }
 
     } catch (e) {
@@ -348,7 +610,10 @@ const App: React.FC = () => {
   // --- Cycle Time State ---
   const [cycleTimeData, setCycleTimeData] = useState([
       { id: 1, ns: '', readyBlowing: '', blowing: '', blowingComplete: '' },
-      { id: 2, ns: '', readyBlowing: '', blowing: '', blowingComplete: '' }
+      { id: 2, ns: '', readyBlowing: '', blowing: '', blowingComplete: '' },
+      { id: 3, ns: '', readyBlowing: '', blowing: '', blowingComplete: '' },
+      { id: 4, ns: '', readyBlowing: '', blowing: '', blowingComplete: '' },
+      { id: 5, ns: '', readyBlowing: '', blowing: '', blowingComplete: '' }
   ]);
 
   // --- Silo State ---
@@ -633,6 +898,11 @@ const App: React.FC = () => {
         // Load Catalyst Data
         if (settingsData.catalyst_data) {
           setCatalystData(settingsData.catalyst_data);
+        }
+
+        // Load Cycle Time Data
+        if (settingsData.cycle_time_data) {
+          setCycleTimeData(settingsData.cycle_time_data);
         }
 
         // Load Silo State
@@ -1022,7 +1292,33 @@ const App: React.FC = () => {
   };
 
   const handleCycleTimeChange = (id: number, field: string, value: string) => {
-      setCycleTimeData(prev => prev.map(row => row.id === id ? { ...row, [field]: value } : row));
+      setCycleTimeData(prev => {
+          const newData = prev.map(row => row.id === id ? { ...row, [field]: value } : row);
+          updateGlobalSetting({ cycle_time_data: newData });
+          return newData;
+      });
+  };
+
+  const handleAddCycleTimeRow = () => {
+      setCycleTimeData(prev => {
+          const newData = [...prev, { id: Date.now(), ns: '', readyBlowing: '', blowing: '', blowingComplete: '' }];
+          updateGlobalSetting({ cycle_time_data: newData });
+          return newData;
+      });
+  };
+
+  const handleClearCycleTime = () => {
+      setCycleTimeData(prev => {
+          const newData = prev.map(row => ({
+               ...row,
+               ns: '',
+               readyBlowing: '',
+               blowing: '',
+               blowingComplete: ''
+          }));
+          updateGlobalSetting({ cycle_time_data: newData });
+          return newData;
+      });
   };
 
   // --- Silo Handlers ---
@@ -1441,7 +1737,7 @@ const App: React.FC = () => {
     if (announcedBatches.current.size > 50) {
         announcedBatches.current.clear();
     }
-  }, [scheduleMatrix, config.audioEnabled, config.isStopped]);
+  }, [scheduleMatrix, config.audioEnabled, config.isStopped, config.alarmSound]);
 
   // Handler to enable audio manually
   const enableAudio = () => {
@@ -1477,7 +1773,7 @@ const App: React.FC = () => {
       } else if (!fullScreenAlertItem) {
           setLastAlertedId(null);
       }
-  }, [fullScreenAlertItem, lastAlertedId, config.audioEnabled]);
+  }, [fullScreenAlertItem, lastAlertedId, config.audioEnabled, config.alarmSound]);
 
   if (isLoading) {
       return (
@@ -1782,6 +2078,77 @@ const App: React.FC = () => {
                         <span className="text-[10px] text-slate-500 font-black leading-tight">SECONDS BEFORE START</span>
                     </div>
                    </div>
+
+                   {/* Alarm Sound Setting */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1">
+                          <Volume2 className="w-3.5 h-3.5 text-blue-500" /> Pilihan Alarm Sound
+                      </label>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <select 
+                          value={config.alarmSound} 
+                          onChange={(e) => {
+                            const val = e.target.value as AlarmSoundType;
+                            handleConfigChange('alarmSound', val);
+                            playAlarmSound(val); // Play preview instantly
+                          }} 
+                          className="flex-1 border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-lg p-3 text-base font-bold focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+                        >
+                          {[
+                            { value: 'siren', label: '1. Suara Knalpot Racing (Siren)' },
+                            { value: 'train', label: '2. Suara Kereta Api' },
+                            { value: 'car_horn', label: '3. Suara Klakson Mobil' },
+                            { value: 'ship_horn', label: '4. Suara Klakson Kapal' },
+                            { value: 'ringtone', label: '5. Suara Nada Dering' },
+                            { value: 'jet', label: '6. Suara Pesawat Jet' },
+                            { value: 'missile', label: '7. Suara Tembakan Rudal' },
+                            { value: 'rocket', label: '8. Suara Roket' },
+                            { value: 'powerpoint', label: '9. PowerPoint Chime' },
+                            { value: 'bomb', label: '10. Bomb Explosion' },
+                            { value: 'fajar_sadboy', label: '11. Fajar Sadboy' }
+                          ].map((opt) => {
+                            const isCurrent = config.alarmSound === opt.value;
+                            return (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label} {isCurrent ? '➔ 🔊 [SEDANG AKTIF]' : ''}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playAlarmSound(config.alarmSound); // test play
+                          }}
+                          className="px-5 py-3 rounded-lg font-black text-sm uppercase transition-all flex items-center justify-center gap-1.5 shadow-md bg-blue-500 hover:bg-blue-600 text-white active:scale-95 border border-blue-600"
+                        >
+                          <Volume2 className="w-4 h-4" />
+                          TEST SOUND
+                        </button>
+                      </div>
+                      
+                      {/* Active Status Badge */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase">Status:</span>
+                        <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-400 font-extrabold border border-emerald-200 dark:border-emerald-900/50 shadow-xs">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Sedang Digunakan: {
+                            config.alarmSound === 'siren' ? 'Suara Knalpot Racing (Siren)' :
+                            config.alarmSound === 'train' ? 'Suara Kereta Api' :
+                            config.alarmSound === 'car_horn' ? 'Suara Klakson Mobil' :
+                            config.alarmSound === 'ship_horn' ? 'Suara Klakson Kapal' :
+                            config.alarmSound === 'ringtone' ? 'Suara Nada Dering' :
+                            config.alarmSound === 'jet' ? 'Suara Pesawat Jet' :
+                            config.alarmSound === 'missile' ? 'Suara Tembakan Rudal' :
+                            config.alarmSound === 'rocket' ? 'Suara Roket' :
+                            config.alarmSound === 'powerpoint' ? 'PowerPoint Chime' :
+                            config.alarmSound === 'bomb' ? 'Bomb Explosion' :
+                            config.alarmSound === 'fajar_sadboy' ? 'Fajar Sadboy' : config.alarmSound
+                          }
+                        </span>
+                      </div>
+                    </div>
+
 
                   {/* Management Controls */}
                   <div className="md:col-span-4 border-t border-slate-200 dark:border-slate-700 pt-6 mt-2 flex flex-col md:flex-row gap-8 items-center justify-between">
@@ -2459,139 +2826,145 @@ const App: React.FC = () => {
       if (currentView !== 'scheduler') return null;
 
       return (
-           <div className="flex flex-col gap-4" style={{ fontSize: `${config.tableFontSize * 1.3}px` }}>
-                
-                {/* 1. CYCLE TIME WIDGET - FULL WIDTH */}
-               <div className="flex flex-col shadow-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-                    <div className={`${GRADE_COLORS[config.currentGrade] || 'bg-violet-600'} text-white font-bold text-[0.7em] px-3 py-1 text-center rounded-t-xl flex items-center justify-center gap-2 uppercase tracking-tight transition-colors`}>
-                        <Calculator className="w-3 h-3" />
-                        HITUNG CYCLE TIME
-                    </div>
-                    <div className={`${GRADE_COLORS[config.currentGrade] ? GRADE_COLORS[config.currentGrade].replace('bg-', 'bg-').concat('/10') : 'bg-white dark:bg-slate-800'} rounded-b-xl p-1.5 flex flex-col gap-1.5 transition-colors`}>
-                        <table className="w-full border-collapse text-center font-bold text-[1.1em]">
-                            <thead>
-                                <tr>
-                                    <th className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em]">NS START</th>
-                                    <th className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em]">READY BLOWING</th>
-                                    <th className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em]">BLOWING START</th>
-                                    <th className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em]">BLOWING HOLD</th>
-                                    <th className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em]">BLOWING COMPLETE</th>
-                                    <th 
-                                        className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em] cursor-pointer hover:text-violet-500 transition-colors"
-                                        onClick={() => {
-                                            setTempFormula(demonomerData.cycleTimeFormula);
-                                            setIsFormulaModalOpen(true);
-                                        }}
-                                        title="Click to edit formula"
-                                    >
-                                        CYCLE TIME
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {cycleTimeData.map((row) => {
-                                    const blowingHold = calculateBlowingHold(row.readyBlowing, row.blowing);
-                                    
-                                    // Calculate Cycle Time using dynamic formula
-                                    let cycleTime = '';
-                                    if (row.blowingComplete && row.ns && blowingHold) {
-                                        const totalDuration = calculateDuration(row.ns, row.blowingComplete);
-                                        if (totalDuration) {
-                                            const [tdH, tdM] = totalDuration.split(':').map(Number);
-                                            const [bhH, bhM] = blowingHold.split(':').map(Number);
-                                            
-                                            const totalMins = (tdH * 60 + tdM);
-                                            const holdMins = (bhH * 60 + bhM);
-                                            
-                                            const resultMins = evaluateMath(demonomerData.cycleTimeFormula, {
-                                                COMP: totalMins,
-                                                HOLD: holdMins
-                                            });
+           <div className="flex flex-col gap-4 animate-in fade-in duration-500" style={{ fontSize: `${config.tableFontSize * 1.3}px` }}>
+               
+               {/* 1. SIDE-BY-SIDE SECTION (60% Hitung Cycle Time & 40% Kesepakatan) */}
+               <div className="grid grid-cols-1 lg:grid-cols-10 gap-4 items-stretch">
+                   
+                   {/* Left: Hitung Cycle Time (60%) */}
+                   <div className="lg:col-span-6 flex flex-col h-full">
+                       <div className="flex flex-col shadow-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 h-full">
+                           <div className={`${GRADE_COLORS[config.currentGrade] || 'bg-violet-600'} text-white font-bold text-[0.7em] px-3 py-1.5 text-center rounded-t-xl flex items-center justify-center gap-2 uppercase tracking-tight transition-colors`}>
+                               <Calculator className="w-3.5 h-3.5" />
+                               HITUNG CYCLE TIME
+                           </div>
+                           <div className={`${GRADE_COLORS[config.currentGrade] ? GRADE_COLORS[config.currentGrade].replace('bg-', 'bg-').concat('/10') : 'bg-white dark:bg-slate-800'} rounded-b-xl p-3 flex flex-col justify-between flex-1 gap-3 transition-colors h-full`}>
+                               <div className="overflow-x-auto w-full">
+                                   <table className="w-full border-collapse text-center font-bold text-[1.1em]">
+                                       <thead>
+                                           <tr>
+                                               <th className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em]">NS START</th>
+                                               <th className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em]">READY BLOWING</th>
+                                               <th className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em]">BLOWING START</th>
+                                               <th className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em]">BLOWING HOLD</th>
+                                               <th className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em]">BLOWING COMPLETE</th>
+                                               <th 
+                                                   className="border-b-2 border-slate-200 dark:border-slate-700 p-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em] cursor-pointer hover:text-violet-500 transition-colors"
+                                                   onClick={() => {
+                                                       setTempFormula(demonomerData.cycleTimeFormula);
+                                                       setIsFormulaModalOpen(true);
+                                                   }}
+                                                   title="Click to edit formula"
+                                               >
+                                                   CYCLE TIME
+                                               </th>
+                                           </tr>
+                                       </thead>
+                                       <tbody>
+                                           {cycleTimeData.map((row) => {
+                                               const blowingHold = calculateBlowingHold(row.readyBlowing, row.blowing);
+                                               
+                                               // Calculate Cycle Time using dynamic formula
+                                               let cycleTime = '';
+                                               if (row.blowingComplete && row.ns && blowingHold) {
+                                                   const totalDuration = calculateDuration(row.ns, row.blowingComplete);
+                                                   if (totalDuration) {
+                                                       const [tdH, tdM] = totalDuration.split(':').map(Number);
+                                                       const [bhH, bhM] = blowingHold.split(':').map(Number);
+                                                       
+                                                       const totalMins = (tdH * 60 + tdM);
+                                                       const holdMins = (bhH * 60 + bhM);
+                                                       
+                                                       const resultMins = evaluateMath(demonomerData.cycleTimeFormula, {
+                                                           COMP: totalMins,
+                                                           HOLD: holdMins
+                                                       });
 
-                                            if (resultMins >= 0) {
-                                                cycleTime = `${Math.floor(resultMins / 60).toString().padStart(2, '0')}:${(Math.round(resultMins % 60)).toString().padStart(2, '0')}`;
-                                            }
-                                        }
-                                    }
+                                                       if (resultMins >= 0) {
+                                                           cycleTime = `${Math.floor(resultMins / 60).toString().padStart(2, '0')}:${(Math.round(resultMins % 60)).toString().padStart(2, '0')}`;
+                                                       }
+                                                   }
+                                               }
 
-                                    return (
-                                        <tr key={row.id} className="border-b border-slate-100 dark:border-slate-700/50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                            <td className="p-0.5">
-                                                <input 
-                                                    type="time" 
-                                                    className="bg-violet-50 dark:bg-violet-900/20 text-violet-900 dark:text-violet-100 outline-none w-full text-center font-black text-[1.5em] rounded-md py-1 focus:ring-2 focus:ring-violet-500/30 transition-all shadow-sm flex justify-center" 
-                                                    value={row.ns} 
-                                                    onChange={(e) => handleCycleTimeChange(row.id, 'ns', e.target.value)}
-                                                />
-                                            </td>
-                                            <td className="p-1">
-                                                <input 
-                                                    type="time" 
-                                                    className="bg-violet-50 dark:bg-violet-900/20 text-violet-900 dark:text-violet-100 outline-none w-full text-center font-black text-[1.5em] rounded-md py-1 focus:ring-4 focus:ring-violet-500/30 transition-all shadow-sm flex justify-center" 
-                                                    value={row.readyBlowing} 
-                                                    onChange={(e) => handleCycleTimeChange(row.id, 'readyBlowing', e.target.value)}
-                                                />
-                                            </td>
-                                            <td className="p-0.5">
-                                                <input 
-                                                    type="time" 
-                                                    className="bg-green-50 dark:bg-green-900/20 text-green-900 dark:text-green-100 outline-none w-full text-center font-bold text-[1.5em] rounded py-1 focus:ring-2 focus:ring-green-500/50 flex justify-center" 
-                                                    value={row.blowing} 
-                                                    onChange={(e) => handleCycleTimeChange(row.id, 'blowing', e.target.value)}
-                                                />
-                                            </td>
-                                            <td className="p-0.5">
-                                                <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-900 dark:text-orange-100 w-full text-center font-bold text-[1.15em] rounded py-1 flex items-center justify-center">
-                                                    {blowingHold || '-'}
-                                                </div>
-                                            </td>
-                                            <td className="p-0.5">
-                                                <input 
-                                                    type="time" 
-                                                    className="bg-violet-50 dark:bg-violet-900/20 text-violet-900 dark:text-violet-100 outline-none w-full text-center font-bold text-[1.5em] rounded py-1 focus:ring-2 focus:ring-violet-500/50 flex justify-center" 
-                                                    value={row.blowingComplete} 
-                                                    onChange={(e) => handleCycleTimeChange(row.id, 'blowingComplete', e.target.value)}
-                                                />
-                                            </td>
-                                            <td className="p-0.5">
-                                                <div className="bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-100 w-full text-center font-black text-[2.2em] rounded py-1 border-2 border-red-500/20 flex items-center justify-center">
-                                                    {cycleTime || '-'}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                        <div className="flex gap-2 mt-1">
-                            <button 
-                                onClick={() => setCycleTimeData(prev => [...prev, { id: Date.now(), ns: '', readyBlowing: '', blowing: '', blowingComplete: '' }])}
-                                className="flex-1 py-1 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 font-bold rounded-lg border border-dashed border-violet-300 dark:border-violet-700 hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors flex items-center justify-center gap-1 text-[0.7em]"
-                            >
-                                <LayoutGrid className="w-3 h-3" />
-                                ADD ROW
-                            </button>
-                            <button 
-                                onClick={() => {
-                                    setCycleTimeData(prev => prev.map(row => ({
-                                        ...row,
-                                        ns: '',
-                                        readyBlowing: '',
-                                        blowing: '',
-                                        blowingComplete: ''
-                                    })));
-                                }}
-                                className="px-4 py-1 bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold rounded-lg border border-dashed border-red-300 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex items-center justify-center gap-1 text-[0.7em]"
-                                title="Kosongkan isi semua kolom pada baris yang ada"
-                            >
-                                <Trash2 className="w-3 h-3" />
-                                CLEAR
-                            </button>
-                        </div>
-                    </div>
+                                               return (
+                                                   <tr key={row.id} className="border-b border-slate-100 dark:border-slate-700/50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                                       <td className="p-0.5">
+                                                           <input 
+                                                               type="time" 
+                                                               className="bg-violet-50 dark:bg-violet-900/20 text-violet-900 dark:text-violet-100 outline-none w-full text-center font-black text-[1.5em] rounded-md py-1 focus:ring-2 focus:ring-violet-500/30 transition-all shadow-sm flex justify-center" 
+                                                               value={row.ns} 
+                                                               onChange={(e) => handleCycleTimeChange(row.id, 'ns', e.target.value)}
+                                                           />
+                                                       </td>
+                                                       <td className="p-1">
+                                                           <input 
+                                                               type="time" 
+                                                               className="bg-violet-50 dark:bg-violet-900/20 text-violet-900 dark:text-violet-100 outline-none w-full text-center font-black text-[1.5em] rounded-md py-1 focus:ring-4 focus:ring-violet-500/30 transition-all shadow-sm flex justify-center" 
+                                                               value={row.readyBlowing} 
+                                                               onChange={(e) => handleCycleTimeChange(row.id, 'readyBlowing', e.target.value)}
+                                                           />
+                                                       </td>
+                                                       <td className="p-0.5">
+                                                           <input 
+                                                               type="time" 
+                                                               className="bg-green-50 dark:bg-green-900/20 text-green-900 dark:text-green-100 outline-none w-full text-center font-bold text-[1.5em] rounded py-1 focus:ring-2 focus:ring-green-500/50 flex justify-center" 
+                                                               value={row.blowing} 
+                                                               onChange={(e) => handleCycleTimeChange(row.id, 'blowing', e.target.value)}
+                                                           />
+                                                       </td>
+                                                       <td className="p-0.5">
+                                                           <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-900 dark:text-orange-100 w-full text-center font-bold text-[1.15em] rounded py-1 flex items-center justify-center">
+                                                               {blowingHold || '-'}
+                                                           </div>
+                                                       </td>
+                                                       <td className="p-0.5">
+                                                           <input 
+                                                               type="time" 
+                                                               className="bg-violet-50 dark:bg-violet-900/20 text-violet-900 dark:text-violet-100 outline-none w-full text-center font-bold text-[1.5em] rounded py-1 focus:ring-2 focus:ring-violet-500/50 flex justify-center" 
+                                                               value={row.blowingComplete} 
+                                                               onChange={(e) => handleCycleTimeChange(row.id, 'blowingComplete', e.target.value)}
+                                                           />
+                                                       </td>
+                                                       <td className="p-0.5">
+                                                           <div className="bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-100 w-full text-center font-black text-[2.2em] rounded py-1 border-2 border-red-500/20 flex items-center justify-center">
+                                                               {cycleTime || '-'}
+                                                           </div>
+                                                       </td>
+                                                   </tr>
+                                               );
+                                           })}
+                                       </tbody>
+                                   </table>
+                               </div>
+                               <div className="flex gap-2 mt-auto pt-2">
+                                   <button 
+                                       onClick={handleAddCycleTimeRow}
+                                       className="flex-1 py-1.5 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 font-bold rounded-lg border border-dashed border-violet-300 dark:border-violet-700 hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors flex items-center justify-center gap-1 text-[0.7em] cursor-pointer"
+                                   >
+                                       <LayoutGrid className="w-3 h-3" />
+                                       ADD ROW
+                                   </button>
+                                   <button 
+                                       onClick={handleClearCycleTime}
+                                       className="px-4 py-1.5 bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold rounded-lg border border-dashed border-red-300 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex items-center justify-center gap-1 text-[0.7em] cursor-pointer"
+                                       title="Kosongkan isi semua kolom pada baris yang ada"
+                                   >
+                                       <Trash2 className="w-3 h-3" />
+                                       CLEAR
+                                   </button>
+                               </div>
+                           </div>
+                       </div>
+                   </div>
+
+                   {/* Right: Kesepakatan (40%) */}
+                   <div className="lg:col-span-4 flex flex-col h-full">
+                       <Kesepakatan />
+                   </div>
+
                </div>
 
-               {/* 2. CONFLICT TIMELINE TABLE */}
+               {/* 2. CONFLICT TIMELINE TABLE (Tabel Cycle) */}
                {renderConflictTimeline()}
            </div>
       );
