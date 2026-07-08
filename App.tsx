@@ -902,7 +902,15 @@ const App: React.FC = () => {
 
         // Load Cycle Time Data
         if (settingsData.cycle_time_data) {
-          setCycleTimeData(settingsData.cycle_time_data);
+          let loadedData = [...settingsData.cycle_time_data];
+          if (loadedData.length > 5) {
+            loadedData = loadedData.slice(0, 5);
+          } else {
+            while (loadedData.length < 5) {
+              loadedData.push({ id: loadedData.length + 1, ns: '', readyBlowing: '', blowing: '', blowingComplete: '' });
+            }
+          }
+          setCycleTimeData(loadedData);
         }
 
         // Load Silo State
@@ -1309,13 +1317,16 @@ const App: React.FC = () => {
 
   const handleClearCycleTime = () => {
       setCycleTimeData(prev => {
-          const newData = prev.map(row => ({
-               ...row,
+          let newData = prev.slice(0, 5).map((row, idx) => ({
+               id: row.id || (idx + 1),
                ns: '',
                readyBlowing: '',
                blowing: '',
                blowingComplete: ''
           }));
+          while (newData.length < 5) {
+              newData.push({ id: newData.length + 1, ns: '', readyBlowing: '', blowing: '', blowingComplete: '' });
+          }
           updateGlobalSetting({ cycle_time_data: newData });
           return newData;
       });
@@ -2938,18 +2949,11 @@ const App: React.FC = () => {
                                </div>
                                <div className="flex gap-2 mt-auto pt-2">
                                    <button 
-                                       onClick={handleAddCycleTimeRow}
-                                       className="flex-1 py-1.5 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 font-bold rounded-lg border border-dashed border-violet-300 dark:border-violet-700 hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors flex items-center justify-center gap-1 text-[0.7em] cursor-pointer"
-                                   >
-                                       <LayoutGrid className="w-3 h-3" />
-                                       ADD ROW
-                                   </button>
-                                   <button 
                                        onClick={handleClearCycleTime}
-                                       className="px-4 py-1.5 bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold rounded-lg border border-dashed border-red-300 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex items-center justify-center gap-1 text-[0.7em] cursor-pointer"
+                                       className="w-full py-2 bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold rounded-lg border border-dashed border-red-300 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex items-center justify-center gap-1.5 text-[0.8em] cursor-pointer"
                                        title="Kosongkan isi semua kolom pada baris yang ada"
                                    >
-                                       <Trash2 className="w-3 h-3" />
+                                       <Trash2 className="w-4 h-4" />
                                        CLEAR
                                    </button>
                                </div>
@@ -3500,7 +3504,7 @@ const App: React.FC = () => {
                               type="text" 
                               value={startSiloData.startTime}
                               onChange={(e) => setStartSiloData({...startSiloData, startTime: e.target.value})}
-                              className="w-full bg-transparent text-center font-mono font-bold text-xl outline-none border-b-2 border-slate-300 focus:border-emerald-500"
+                              className="w-full bg-transparent text-center font-mono font-black text-xl outline-none border-b-2 border-slate-300 focus:border-emerald-500 text-red-600 dark:text-red-400"
                           />
                       </div>
 
