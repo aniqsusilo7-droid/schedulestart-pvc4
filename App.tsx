@@ -703,6 +703,17 @@ const App: React.FC = () => {
     }
   }, [isSettingsOpen]);
 
+  // --- Auto-close Settings Panel after 3 minutes ---
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+
+    const timer = setTimeout(() => {
+      setIsSettingsOpen(false);
+    }, 180000); // 3 minutes
+
+    return () => clearTimeout(timer);
+  }, [isSettingsOpen]);
+
   useEffect(() => {
     const handleFirstInteraction = () => {
         if (!audioAllowed) {
@@ -1944,23 +1955,13 @@ const App: React.FC = () => {
                   
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                   
-                  {/* Appearance & Sound Controls */}
+                  {/* Sound & Display Controls */}
                   <div className="md:col-span-1 flex flex-col gap-4">
-                      <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 block">Appearance & Sound</label>
-                      <div className="grid grid-cols-2 gap-3">
-                          <button 
-                            onClick={toggleTheme} 
-                            className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border transition-all shadow-sm ${config.theme === 'dark' ? 'bg-slate-700 text-yellow-400 border-slate-600' : 'bg-white text-violet-600 border-slate-200 hover:border-violet-300'}`}
-                          >
-                              {config.theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-                              <span className="font-black text-[10px] uppercase tracking-tighter">
-                                {config.theme === 'dark' ? 'DARK MODE' : 'LIGHT MODE'}
-                              </span>
-                          </button>
-
+                      <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 block">Sound & Display</label>
+                      <div className="grid grid-cols-1 gap-3">
                           <button 
                             onClick={toggleAudio} 
-                            className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border transition-all shadow-sm ${config.audioEnabled ? 'bg-green-500 text-white border-green-600' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}
+                            className={`flex flex-row items-center justify-center gap-2 p-3 rounded-xl border transition-all shadow-sm ${config.audioEnabled ? 'bg-green-500 text-white border-green-600' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}
                           >
                               {config.audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
                               <span className="font-black text-[10px] uppercase tracking-tighter">
