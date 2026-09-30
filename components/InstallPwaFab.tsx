@@ -152,9 +152,7 @@ export const InstallPwaFab: React.FC = () => {
             {/* Header Modal */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-cyan-600 flex items-center justify-center font-black text-white text-sm shadow-inner">
-                  PVC 4
-                </div>
+                <img src="/favicon.svg" alt="PVC 4 Icon" className="w-10 h-10 rounded-2xl shadow-md border border-slate-700/60" />
                 <div>
                   <h3 className="text-sm font-black uppercase tracking-wide text-white">
                     Install di iPhone / iPad
@@ -233,9 +231,7 @@ export const InstallPwaFab: React.FC = () => {
             {/* Header Modal */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-cyan-600 flex items-center justify-center font-black text-white text-sm shadow-inner">
-                  <Smartphone className="w-5 h-5 text-white" />
-                </div>
+                <img src="/favicon.svg" alt="PVC 4 Icon" className="w-10 h-10 rounded-2xl shadow-md border border-slate-700/60" />
                 <div>
                   <h3 className="text-sm font-black uppercase tracking-wide text-white">
                     Install di Android

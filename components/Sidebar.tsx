@@ -214,14 +214,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         height: 'calc(var(--app-viewport-height, 100vh) - 0.5rem)',
       }}
     >
-      {/* Tombol lipat */}
-      <div className="shrink-0 p-2 border-b border-slate-200 dark:border-slate-800">
+      {/* Header Sidebar dengan Icon PVC 4 */}
+      <div className="shrink-0 p-2 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+        {!isRail && (
+          <div className="flex items-center gap-2 pl-1 min-w-0">
+            <img src="/favicon.svg" alt="PVC 4" className="w-7 h-7 rounded-lg shadow-xs shrink-0" />
+            <span className="font-black text-xs text-slate-800 dark:text-slate-100 tracking-tight truncate">
+              SCHEDULE PVC 4
+            </span>
+          </div>
+        )}
         <button
           type="button"
           onClick={isMobile ? onMobileClose : onToggleCollapsed}
           title={isMobile ? 'Tutup menu' : isRail ? 'Tampilkan menu' : 'Sembunyikan menu'}
-          className={`w-full flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 cursor-pointer ${
-            isRail ? 'justify-center px-0 py-2' : 'px-2.5 py-3 lg:py-2'
+          className={`flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 cursor-pointer ${
+            isRail ? 'w-full justify-center px-0 py-2' : 'px-2 py-1.5'
           }`}
         >
           {isMobile
@@ -230,8 +238,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ? <PanelRightOpen className="w-[18px] h-[18px] shrink-0 text-slate-600 dark:text-slate-300" />
               : <PanelRightClose className="w-[18px] h-[18px] shrink-0 text-slate-600 dark:text-slate-300" />}
           {!isRail && (
-            <span className="text-[12px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
-              {isMobile ? 'Tutup' : 'Sembunyikan'}
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+              {isMobile ? 'Tutup' : 'Lipat'}
             </span>
           )}
         </button>

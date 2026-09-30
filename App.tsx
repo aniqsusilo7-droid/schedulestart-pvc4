@@ -14,7 +14,7 @@ import { useMediaQuery, DESKTOP_QUERY } from './utils/useMediaQuery';
 import { getShiftGroupsNow, getAdministrativeShiftDate, getActiveShifts, SHIFT_SLOTS, ShiftGroup } from './utils/shiftSchedule';
 import { shouldShowOpenModeReminder } from './utils/openModeReminder';
 import type { BackupQuotaResult } from './utils/backupSchedule';
-import { Settings, RefreshCw, AlertTriangle, Calendar, CalendarDays, Hash, Volume2, VolumeX, Edit3, X, PlayCircle, Clock as ClockIcon, FileText, Ban, FastForward, PauseCircle, ArrowRightCircle, CheckCircle2, Wrench, RotateCcw, Power, Bell, Timer, ChevronDown, ChevronUp, Info, Tag, ArrowRight, ArrowRightLeft, LayoutGrid, Activity, Database, Type, Sun, Moon, Pause, Play, Save, Gauge, Move, ArrowUp, ArrowDown, Palette, ZoomIn, ZoomOut, Monitor, Maximize2, Check, Calculator, StickyNote, Handshake, Trash2, Sliders, Eye, Sparkles, ShieldAlert, TrendingUp, Wallet, Menu, History } from 'lucide-react';
+import { Settings, RefreshCw, AlertTriangle, Calendar, CalendarDays, Hash, Volume2, VolumeX, Edit3, X, PlayCircle, Clock as ClockIcon, FileText, Ban, FastForward, PauseCircle, ArrowRightCircle, CheckCircle2, Wrench, RotateCcw, Power, Bell, Timer, ChevronDown, ChevronUp, Info, Tag, ArrowRight, ArrowRightLeft, LayoutGrid, Activity, Database, Type, Sun, Moon, Pause, Play, Save, Gauge, Move, ArrowUp, ArrowDown, Palette, ZoomIn, ZoomOut, Monitor, Maximize2, Check, Calculator, StickyNote, Handshake, Trash2, Sliders, Eye, Sparkles, ShieldAlert, TrendingUp, Wallet, Menu, History, Lock } from 'lucide-react';
 import { 
   db, 
   doc, 
@@ -1108,10 +1108,16 @@ const App: React.FC = () => {
   // --- State ---
   const [currentView, setCurrentView] = useState<SidebarView>('scheduler');
 
-  /* Di bawah 1024px tabel scheduler tidak muat, jadi struktur render diganti
-     (tabel jadi kartu, sidebar jadi drawer) — bukan sekadar gaya. */
-  const isDesktop = useMediaQuery(DESKTOP_QUERY);
-  const isMobileScheduleReadOnly = !isDesktop;
+  /* Deteksi mode HP/mobile atau rasio yang seukuran (<1024px, rasio layar mobile, atau touch device) */
+  const isDesktopQuery = useMediaQuery(DESKTOP_QUERY);
+  const isMobileScheduleReadOnly = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const isSmallScreen = window.innerWidth < 1024;
+    const isMobileUA = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+    const isTouchAndSmall = typeof navigator !== 'undefined' && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) && isSmallScreen;
+    return !isDesktopQuery || isSmallScreen || isMobileUA || isTouchAndSmall;
+  }, [isDesktopQuery]);
+  const isDesktop = !isMobileScheduleReadOnly;
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   /* Grup shift aktif. Tiap grup adalah halaman tersendiri, jadi kombinasi
@@ -1964,8 +1970,12 @@ const App: React.FC = () => {
 
   // --- Real-time / Periodic Saver Helpers ---
   
-  // Save specific global setting to Firestore
+  // Save specific global setting to Firestore (diblokir pada mode mobile/HP)
   const updateGlobalSetting = async (updates: Partial<any>): Promise<boolean> => {
+      if (isMobileScheduleReadOnly) {
+          console.warn("[Mode Mobile] Perubahan diblokir: aplikasi dalam mode hanya baca (read-only) di perangkat mobile.");
+          return false;
+      }
       try {
           const docRef = doc(db, 'app_settings', '1');
           await setDoc(docRef, updates, { merge: true });
@@ -2041,10 +2051,7 @@ const App: React.FC = () => {
 
   // --- Handlers ---
   const handleConfigChange = (key: keyof AppState, value: any) => {
-    if (
-      isMobileScheduleReadOnly &&
-      (currentView === 'scheduler' || key === 'currentGrade' || key === 'gradeMode')
-    ) return;
+    if (isMobileScheduleReadOnly) return;
     const previousValue = config[key];
     setConfig((prev) => ({ ...prev, [key]: value }));
 
@@ -2242,6 +2249,7 @@ const App: React.FC = () => {
   };
   
   const toggleStop = () => {
+    if (isMobileScheduleReadOnly) return;
     const nextIsStopped = !config.isStopped;
     if (nextIsStopped) {
       const freezeTs = Date.now();
@@ -2288,6 +2296,7 @@ const App: React.FC = () => {
   };
 
   const toggleMarqueePause = () => {
+      if (isMobileScheduleReadOnly) return;
       handleConfigChange('isMarqueePaused', !config.isMarqueePaused);
   };
 
@@ -2521,6 +2530,7 @@ const App: React.FC = () => {
   };
 
   const handleCycleTimeChange = (id: number, field: string, value: string) => {
+      if (isMobileScheduleReadOnly) return;
       lastCycleTimeUpdateRef.current = Date.now();
       const previousRow = cycleTimeData.find(row => row.id === id);
       const newData = cycleTimeData.map(row => row.id === id ? { ...row, [field]: value } : row);
@@ -5032,12 +5042,13 @@ const App: React.FC = () => {
                                         <th className="cycle-time-header border-b-2 border-slate-200 dark:border-slate-700 px-0.5 py-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em] leading-tight">BLOWING HOLD</th>
                                         <th className="cycle-time-header border-b-2 border-slate-200 dark:border-slate-700 px-0.5 py-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em] leading-tight">BLOWING COMPLETE</th>
                                         <th 
-                                            className="cycle-time-header border-b-2 border-slate-200 dark:border-slate-700 px-0.5 py-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em] leading-tight cursor-pointer hover:text-blue-500 transition-colors"
+                                            className={`cycle-time-header border-b-2 border-slate-200 dark:border-slate-700 px-0.5 py-1 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 uppercase tracking-wider text-[0.75em] leading-tight ${isMobileScheduleReadOnly ? 'cursor-default' : 'cursor-pointer hover:text-blue-500'} transition-colors`}
                                             onClick={() => {
+                                                if (isMobileScheduleReadOnly) return;
                                                 setTempFormula(demonomerData.cycleTimeFormula);
                                                 setIsFormulaModalOpen(true);
                                             }}
-                                            title="Click to edit formula"
+                                            title={isMobileScheduleReadOnly ? 'Rumus cycle time hanya dapat diubah dari desktop' : 'Click to edit formula'}
                                         >
                                             CYCLE TIME
                                         </th>
@@ -5075,7 +5086,9 @@ const App: React.FC = () => {
                                                 <td className="p-[2px]">
                                                     <input 
                                                         type="time" 
-                                                        className={cycleTimeInputClass}
+                                                        readOnly={isMobileScheduleReadOnly}
+                                                        disabled={isMobileScheduleReadOnly}
+                                                        className={`${cycleTimeInputClass} ${isMobileScheduleReadOnly ? 'cursor-default opacity-80' : ''}`}
                                                         value={row.ns} 
                                                         onChange={(e) => handleCycleTimeChange(row.id, 'ns', e.target.value)}
                                                     />
@@ -5083,7 +5096,9 @@ const App: React.FC = () => {
                                                 <td className="p-[2px]">
                                                     <input 
                                                         type="time" 
-                                                        className={cycleTimeInputClass}
+                                                        readOnly={isMobileScheduleReadOnly}
+                                                        disabled={isMobileScheduleReadOnly}
+                                                        className={`${cycleTimeInputClass} ${isMobileScheduleReadOnly ? 'cursor-default opacity-80' : ''}`}
                                                         value={row.readyBlowing} 
                                                         onChange={(e) => handleCycleTimeChange(row.id, 'readyBlowing', e.target.value)}
                                                     />
@@ -5091,7 +5106,9 @@ const App: React.FC = () => {
                                                 <td className="p-[2px]">
                                                     <input 
                                                         type="time" 
-                                                        className={`${cycleTimeInputClass} !bg-green-50 dark:!bg-green-900/20 !text-green-900 dark:!text-green-100 focus:!ring-green-500/50`}
+                                                        readOnly={isMobileScheduleReadOnly}
+                                                        disabled={isMobileScheduleReadOnly}
+                                                        className={`${cycleTimeInputClass} !bg-green-50 dark:!bg-green-900/20 !text-green-900 dark:!text-green-100 focus:!ring-green-500/50 ${isMobileScheduleReadOnly ? 'cursor-default opacity-80' : ''}`}
                                                         value={row.blowing} 
                                                         onChange={(e) => handleCycleTimeChange(row.id, 'blowing', e.target.value)}
                                                     />
@@ -5104,7 +5121,9 @@ const App: React.FC = () => {
                                                 <td className="p-[2px]">
                                                     <input 
                                                         type="time" 
-                                                        className={cycleTimeInputClass}
+                                                        readOnly={isMobileScheduleReadOnly}
+                                                        disabled={isMobileScheduleReadOnly}
+                                                        className={`${cycleTimeInputClass} ${isMobileScheduleReadOnly ? 'cursor-default opacity-80' : ''}`}
                                                         value={row.blowingComplete} 
                                                         onChange={(e) => handleCycleTimeChange(row.id, 'blowingComplete', e.target.value)}
                                                     />
@@ -5122,7 +5141,9 @@ const App: React.FC = () => {
                             </table>
                             <div className="flex justify-end mt-0.5">
                                 <button 
+                                    disabled={isMobileScheduleReadOnly}
                                     onClick={() => {
+                                        if (isMobileScheduleReadOnly) return;
                                         if (window.confirm("Apakah Anda yakin ingin mengosongkan semua data cycle time?")) {
                                             const clearedData = [
                                                 { id: 1, ns: '', readyBlowing: '', blowing: '', blowingComplete: '' },
@@ -5147,8 +5168,8 @@ const App: React.FC = () => {
                                             });
                                         }
                                     }}
-                                    className="px-3 py-1 bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold rounded-md border border-dashed border-red-300 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex items-center justify-center gap-1 text-[0.75em]"
-                                    title="Kosongkan semua data cycle time"
+                                    className={`px-3 py-1 bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold rounded-md border border-dashed border-red-300 dark:border-red-800 transition-colors flex items-center justify-center gap-1 text-[0.75em] ${isMobileScheduleReadOnly ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'hover:bg-red-200 dark:hover:bg-red-900/50'}`}
+                                    title={isMobileScheduleReadOnly ? 'Data cycle time hanya dapat di-reset dari desktop' : 'Kosongkan semua data cycle time'}
                                 >
                                     <RotateCcw className="w-3 h-3" />
                                     RESET DATA
@@ -5813,6 +5834,14 @@ const App: React.FC = () => {
           <div className={`flex-1 flex flex-col min-w-0 min-h-0 ${currentView === 'scheduler' ? 'gap-1' : 'gap-4'}`}>
               {/* Header */}
               {renderSection('header', 0)}
+
+              {/* Banner Pemberitahuan Mode Mobile Hanya-Baca (kecuali Jadwal Backup dan Kas Grup) */}
+              {isMobileScheduleReadOnly && currentView !== 'jadwal' && currentView !== 'kas' && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/70 rounded-xl text-amber-900 dark:text-amber-200 text-xs font-bold shadow-2xs">
+                      <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>Mode HP / Mobile: <strong>Hanya Baca (Read-Only)</strong>. Pengeditan hanya diizinkan pada menu <strong>Jadwal Backup</strong> &amp; <strong>Kas Grup</strong>.</span>
+                  </div>
+              )}
 
               <div
                 className="flex-1 flex flex-col min-w-0 lg:min-h-0 lg:overflow-auto"
