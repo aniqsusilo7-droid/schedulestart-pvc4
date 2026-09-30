@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
     silo_state JSONB DEFAULT '{"activeSilo": null, "silos": {"O": {"id": "O", "lotNumber": "", "capacitySet": "", "startTime": "", "finishTime": "", "percentage": "", "totalUpdate": ""}, "P": {"id": "P", "lotNumber": "", "capacitySet": "", "startTime": "", "finishTime": "", "percentage": "", "totalUpdate": ""}, "Q": {"id": "Q", "lotNumber": "", "capacitySet": "", "startTime": "", "finishTime": "", "percentage": "", "totalUpdate": ""}}}'::jsonb,
     demonomer_data JSONB DEFAULT '{"f2002": 125, "aie2802": 1070, "pvcPercent": 25, "multipliers": {"SM": 118, "SLP": 108, "SLK": 128, "SE": 140, "SR": 100}, "pvcFormula": "F2002*AI2802/1000*%PVC", "steamFormula": "PVC * Multiplier"}'::jsonb,
     grade_mode TEXT DEFAULT 'normal',
-    cycle_time_data JSONB DEFAULT '[{"id": 1, "ns": "", "readyBlowing": "", "blowing": "", "blowingComplete": ""}, {"id": 2, "ns": "", "readyBlowing": "", "blowing": "", "blowingComplete": ""}, {"id": 3, "ns": "", "readyBlowing": "", "blowing": "", "blowingComplete": ""}, {"id": 4, "ns": "", "readyBlowing": "", "blowing": "", "blowingComplete": ""}, {"id": 5, "ns": "", "readyBlowing": "", "blowing": "", "blowingComplete": ""}]'::jsonb
+    cycle_time_data JSONB DEFAULT '[{"id": 1, "ns": "", "readyBlowing": "", "blowing": "", "blowingComplete": ""}, {"id": 2, "ns": "", "readyBlowing": "", "blowing": "", "blowingComplete": ""}]'::jsonb
 );
 
 INSERT INTO app_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS schedule_overrides (
     shift_subsequent BOOLEAN DEFAULT FALSE,
     manual_delay_minutes BIGINT DEFAULT 0,
     stage_info TEXT,
+    custom_interval_hours INT DEFAULT NULL,
+    custom_interval_minutes INT DEFAULT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -149,3 +151,97 @@ CREATE POLICY "Allow all access to kesepakatan" ON kesepakatan FOR ALL USING (tr
 ALTER TABLE catatan_data ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all access to catatan_data" ON catatan_data FOR ALL USING (true) WITH CHECK (true);
 
+
+-- ==============================================================================================
+-- UNTUK UPDATE DATABASE SUPABASE YANG SUDAH ADA (JALANKAN SCRIPT INI DI SUPABASE SQL EDITOR):
+-- ==============================================================================================
+--
+-- ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS alarm_sound TEXT DEFAULT 'siren';
+-- ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS grade_mode TEXT DEFAULT 'normal';
+-- ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS cycle_time_data JSONB DEFAULT '[{"id": 1, "ns": "", "readyBlowing": "", "blowing": "", "blowingComplete": ""}, {"id": 2, "ns": "", "readyBlowing": "", "blowing": "", "blowingComplete": ""}]'::jsonb;
+--
+-- ==============================================================================================
+
+
+CREATE TABLE IF NOT EXISTS jadwal (
+    id BIGINT PRIMARY KEY DEFAULT 1,
+    overtime_tables JSONB DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE jadwal ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'jadwal' 
+        AND policyname = 'Allow all access to jadwal'
+    ) THEN
+        CREATE POLICY "Allow all access to jadwal" ON jadwal FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $$;
+INSERT INTO jadwal (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS kas_grup (
+    id BIGINT PRIMARY KEY DEFAULT 1,
+    data JSONB DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE kas_grup ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'kas_grup' 
+        AND policyname = 'Allow all access to kas_grup'
+    ) THEN
+        CREATE POLICY "Allow all access to kas_grup" ON kas_grup FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $$;
+INSERT INTO kas_grup (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- ==============================================================================================
+-- AUDIT LOG PERUBAHAN OPERASIONAL (INSERT-ONLY)
+--
+-- Tabel ini terpisah dari data operasional. Jalankan blok ini sekali di Supabase SQL Editor
+-- sebelum mengaktifkan menu Riwayat Perubahan di aplikasi.
+-- ==============================================================================================
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id BIGSERIAL PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT,
+    summary TEXT NOT NULL,
+    changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    administrative_date DATE,
+    active_shifts TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    shift_groups JSONB NOT NULL DEFAULT '{}'::jsonb,
+    before_data JSONB,
+    after_data JSONB
+);
+
+CREATE INDEX IF NOT EXISTS audit_logs_changed_at_idx ON audit_logs (changed_at DESC);
+CREATE INDEX IF NOT EXISTS audit_logs_event_type_idx ON audit_logs (event_type);
+CREATE INDEX IF NOT EXISTS audit_logs_administrative_date_idx ON audit_logs (administrative_date);
+
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies
+        WHERE tablename = 'audit_logs'
+        AND policyname = 'Allow read access to audit_logs'
+    ) THEN
+        CREATE POLICY "Allow read access to audit_logs"
+            ON audit_logs FOR SELECT USING (true);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT FROM pg_policies
+        WHERE tablename = 'audit_logs'
+        AND policyname = 'Allow insert access to audit_logs'
+    ) THEN
+        CREATE POLICY "Allow insert access to audit_logs"
+            ON audit_logs FOR INSERT WITH CHECK (true);
+    END IF;
+END $$;

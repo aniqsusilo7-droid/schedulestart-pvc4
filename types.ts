@@ -1,6 +1,6 @@
 
 export type GradeType = 'SM' | 'SLK' | 'SLP' | 'SE' | 'SR';
-export type AlarmSoundType = 'siren' | 'rocket' | 'jet' | 'powerpoint' | 'bomb' | 'fajar_sadboy' | 'train' | 'car_horn' | 'ship_horn' | 'ringtone' | 'missile';
+export type AlarmSoundType = 'siren' | 'rocket' | 'jet' | 'powerpoint' | 'bomb' | 'fajar_sadboy' | 'train' | 'car_horn' | 'ship_horn' | 'ringtone' | 'missile' | 'crow' | 'magic_spell' | 'ufo' | 'laser' | 'telephone' | 'arcade' | 'gong' | 'siren_polisi' | 'siren_kebakaran' | 'kicau_mania' | 'google_robot';
 
 export interface ReactorConfig {
   id: string;
@@ -21,6 +21,8 @@ export interface ItemConfig {
   shiftSubsequent?: boolean; // If true, this delay affects future times
   manualDelayMinutes?: number; // Track explicitly applied delay
   stageInfo?: string; // Specific label for this batch (e.g., "Sample Blowing")
+  customIntervalHours?: number; // Custom interval hours for subsequent reactors
+  customIntervalMinutes?: number; // Custom interval minutes for subsequent reactors
 }
 
 export interface ScheduleItem {
@@ -36,6 +38,8 @@ export interface ScheduleItem {
   grade: GradeType; // Resolved grade
   deltaMinutes: number; // Difference from original scheduled time
 }
+
+export type AlertStyleType = 'classic' | 'neon' | 'emergency' | 'glass' | 'industrial' | 'holo' | 'matrix' | 'minimal' | 'warning_stripe';
 
 export interface AppState {
   baseBatchNumber: number;
@@ -54,6 +58,7 @@ export interface AppState {
   marqueeSpeed: number; // Duration in seconds for marquee animation
   theme: 'light' | 'dark'; // UI Theme
   alarmSound: AlarmSoundType; // Selected alarm sound
+  alertStyle?: AlertStyleType; // Visual style for full screen alert overlay
   
   // Design / Layout Props
   tableRowHeight: number; // pixel height
@@ -65,23 +70,27 @@ export interface AppState {
 }
 
 // --- Silo Types ---
+export type SiloId = 'L' | 'M' | 'N';
+
+export interface ShiftUpdate {
+  percentage: string | number;
+  totalUpdate: string | number;
+}
+
 export interface SiloData {
-  id: 'L' | 'M' | 'N';
+  id: SiloId;
   lotNumber: string;
   capacitySet: string | number; // Changed to allow empty string
   startTime: string | null; // HH:mm format
   finishTime: string | null; // HH:mm format
-  percentage: string | number; // Changed to allow empty string
-  totalUpdate: string | number; // Changed to allow empty string
-  percentage_14?: string | number;
-  totalUpdate_14?: string | number;
-  percentage_22?: string | number;
-  totalUpdate_22?: string | number;
+  percentage: string | number; // Backwards compatibility primary percentage
+  totalUpdate: string | number; // Backwards compatibility primary total update
+  shifts?: Record<string, ShiftUpdate>; // '06:00' | '14:00' | '22:00'
 }
 
 export interface SiloState {
-  activeSilo: 'L' | 'M' | 'N' | null; // Allow null if none active initially
-  silos: Record<'L' | 'M' | 'N', SiloData>;
+  activeSilo: SiloId | null; // Allow null if none active initially
+  silos: Record<SiloId, SiloData>;
 }
 
 export interface DemonomerData {
@@ -94,17 +103,11 @@ export interface DemonomerData {
   cycleTimeFormula: string;
 }
 
-export interface Shift {
-  name: string;
-  time: string;
-  closeMode: string;
-  openMode: string;
-}
-
-export interface KesepakatanData {
-  id?: string;
-  shifts: Shift[];
-  additionalNotes: string[];
-  footerNote: string;
+export interface CycleTimeRow {
+  id: number;
+  ns: string;
+  readyBlowing: string;
+  blowing: string;
+  blowingComplete: string;
 }
 

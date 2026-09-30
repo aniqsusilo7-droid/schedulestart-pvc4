@@ -6,5 +6,7 @@
   "firestoreDatabaseId": "ai-studio-286d74e9-d738-4c34-ba8f-1f2309c2fd9e",
   "storageBucket": "zeta-conduit-7cf5x.firebasestorage.app",
   "messagingSenderId": "200557523184",
-  "measurementId": ""
+  "measurementId": "",
+  "oAuthClientId": "200557523184-acls12uc8d6gkgcl3hqk3v69cjiber3d.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

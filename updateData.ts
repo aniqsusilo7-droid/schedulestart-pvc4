@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { db, doc, setDoc } from './firebaseClient';
 
 const updateData = async () => {
     const masterReference = [
@@ -9,53 +9,47 @@ const updateData = async () => {
     ];
 
     const specialNotes = [
-        {"cat": "RE-S grade", "code": "EBD0907626.DT03", "color": "bg-[#b2dfdb]/60 dark:bg-emerald-900/20"},
-        {"cat": "RE-T grade", "code": "EBD0910626.DT03", "color": "bg-[#b2dfdb]/60 dark:bg-emerald-900/20"},
-        {"cat": "RE-U grade", "code": "EBD0913626.DT03", "color": "bg-[#b2dfdb]/60 dark:bg-emerald-900/20"},
-        {"cat": "RE-V grade", "code": "EBD0916626.DT03", "color": "bg-[#b2dfdb]/60 dark:bg-emerald-900/20"},
-        {"cat": "RE-W grade", "code": "EBD0919626.DT03", "color": "bg-[#b2dfdb]/60 dark:bg-emerald-900/20"},
+        {"cat": "RE-O grade", "code": "EBD0907626.DT03", "color": "bg-[#b2dfdb]/60 dark:bg-emerald-900/20"},
+        {"cat": "RE-P grade", "code": "EBD0910626.DT03", "color": "bg-[#b2dfdb]/60 dark:bg-emerald-900/20"},
+        {"cat": "RE-Q grade", "code": "EBD0913626.DT03", "color": "bg-[#b2dfdb]/60 dark:bg-emerald-900/20"},
+        {"cat": "RE-R grade", "code": "EBD0916626.DT03", "color": "bg-[#b2dfdb]/60 dark:bg-emerald-900/20"},
         {"cat": "Drying Grade", "code": "EBD1019110.DT06", "bold": true, "color": "bg-white/80"},
         {"cat": "Blowdown A", "code": "EBD1019110.DT07"},
         {"cat": "Blowdown B", "code": "EBD1019110.DT08"},
         {"cat": "Slurry Tank", "code": "EBD1019110.DT09"},
-        {"cat": "Silo O Grade", "code": "EBD1019110.DT10"},
-        {"cat": "Silo P Grade", "code": "EBD1019110.DT11"},
-        {"cat": "Silo Q Grade", "code": "EBD1019110.DT12"},
+        {"cat": "Silo K Grade", "code": "EBD1019110.DT10"},
+        {"cat": "Silo L Grade", "code": "EBD1019110.DT11"},
+        {"cat": "Silo M Grade", "code": "EBD1019110.DT12"},
         {"cat": "LOT NUMBER DI PI", "code": "EBD1015111.NX01"},
         {"cat": "LOT NUMBER DI SILO", "code": "EBD1015111.NX02<br/>EBD1015111.NX03<br/>EBD1015111.NX04"}
     ];
 
     const gradeControl = [
         {"code": "ESF0907201", "desc": "E-PO GRADE MATCHFOR BL"},
-        {"code": "ESF1018222", "desc": "GRADE CTRL RE-S"},
-        {"code": "ESF1018223", "desc": "GRADE CTRL RE-T"},
-        {"code": "ESF1018224", "desc": "GRADE CTRL RE-U"},
-        {"code": "ESF1018225", "desc": "GRADE CTRL RE-V"},
-        {"code": "ESF1018226", "desc": "GRADE CTRL RE-W"},
+        {"code": "ESF1018222", "desc": "GRADE CTRL RE-O"},
+        {"code": "ESF1018223", "desc": "GRADE CTRL RE-P"},
+        {"code": "ESF1018224", "desc": "GRADE CTRL RE-Q"},
+        {"code": "ESF1018225", "desc": "GRADE CTRL RE-R"},
         {"code": "ESF1018227", "desc": "GRADE CTRL VE-E118A"},
         {"code": "ESF1018228", "desc": "GRADE CTRL VE-E118B"},
         {"code": "ESF1018229", "desc": "GRADE CTRL DEMONOMER"},
         {"code": "ESF1018230", "desc": "GRADE CTRL VE-E202"},
         {"code": "ESF1018231", "desc": "GRADE CTRL DRYING"},
-        {"code": "ESF1018232", "desc": "GRADE CTRL SILO O"},
-        {"code": "ESF1018233", "desc": "GRADE CTRL SILO P"},
-        {"code": "ESF1018234", "desc": "GRADE CTRL SILO Q"},
+        {"code": "ESF1018232", "desc": "GRADE CTRL SILO K"},
+        {"code": "ESF1018233", "desc": "GRADE CTRL SILO L"},
+        {"code": "ESF1018234", "desc": "GRADE CTRL SILO M"},
         {"code": "ECT0907703", "desc": "WASH CT"}
     ];
 
-    const { error } = await supabase
-        .from('catatan_data')
-        .update({
+    try {
+        await setDoc(doc(db, 'catatan_data', '1'), {
             master_reference: masterReference,
             special_notes: specialNotes,
             grade_control: gradeControl
-        })
-        .eq('id', 1);
-
-    if (error) {
-        console.error("Error updating data:", error);
-    } else {
+        }, { merge: true });
         console.log("Data updated successfully!");
+    } catch (error) {
+        console.error("Error updating data:", error);
     }
 };
 
