@@ -1108,16 +1108,10 @@ const App: React.FC = () => {
   // --- State ---
   const [currentView, setCurrentView] = useState<SidebarView>('scheduler');
 
-  /* Deteksi mode HP/mobile atau rasio yang seukuran (<1024px, rasio layar mobile, atau touch device) */
+  /* Deteksi layout desktop untuk kebutuhan visual layout */
   const isDesktopQuery = useMediaQuery(DESKTOP_QUERY);
-  const isMobileScheduleReadOnly = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    const isSmallScreen = window.innerWidth < 1024;
-    const isMobileUA = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-    const isTouchAndSmall = typeof navigator !== 'undefined' && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) && isSmallScreen;
-    return !isDesktopQuery || isSmallScreen || isMobileUA || isTouchAndSmall;
-  }, [isDesktopQuery]);
-  const isDesktop = !isMobileScheduleReadOnly;
+  const isDesktop = isDesktopQuery;
+  const isMobileScheduleReadOnly = false;
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   /* Grup shift aktif. Tiap grup adalah halaman tersendiri, jadi kombinasi
@@ -1544,6 +1538,29 @@ const App: React.FC = () => {
   }, [isDemonomerPopupOpen]);
 
   const lastCycleTimeUpdateRef = useRef<number>(0);
+  const lastScheduleOverrideUpdateRef = useRef<number>(0);
+
+  const sanitizeFirestoreData = <T extends Record<string, any>>(obj: T): T => {
+    if (obj === null || typeof obj !== 'object') {
+      return obj;
+    }
+    if (Array.isArray(obj)) {
+      return obj
+        .filter(item => item !== undefined)
+        .map(item => (typeof item === 'object' && item !== null ? sanitizeFirestoreData(item) : item)) as any;
+    }
+    const clean: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+          clean[key] = sanitizeFirestoreData(value);
+        } else {
+          clean[key] = value;
+        }
+      }
+    }
+    return clean as T;
+  };
 
   // --- Auto-scroll Reaktor Cycle Timeline to LIVE (NOW) position ---
   const cycleTimelineContainerRef = useRef<HTMLDivElement>(null);
@@ -1664,6 +1681,7 @@ const App: React.FC = () => {
     let settingsData: any = null;
     let notesData: any[] = [];
     let overridesData: any[] = [];
+    let overridesLoaded = false;
 
     try {
       // 1. Fetch Global Settings from Firestore
@@ -1680,6 +1698,7 @@ const App: React.FC = () => {
       // 3. Fetch Schedule Overrides from Firestore
       const overridesSnap = await getDocs(collection(db, 'schedule_overrides'));
       overridesData = overridesSnap.docs.map(d => ({ ...d.data(), id: d.data().id || d.id }));
+      overridesLoaded = true;
 
     } catch (error) {
       console.warn("Failed to load data from Firestore:", error);
@@ -1701,7 +1720,7 @@ const App: React.FC = () => {
                   isSkipped: row.is_skipped,
                   skipReason: row.skip_reason || 'PASS',
                   mode: row.mode,
-                  grade: row.grade,
+                  grade: row.grade || 'SM',
                   note: row.note,
                   shiftSubsequent: row.shift_subsequent,
                   manualDelayMinutes: row.manual_delay_minutes,
@@ -1738,31 +1757,36 @@ const App: React.FC = () => {
               localStorage.setItem('app_is_stopped', 'false');
           }
 
-          setConfig({
-              baseBatchNumber: settingsData.base_batch_number || 5164,
-              baseStartTime: settingsData.base_start_time || new Date().toISOString(),
-              intervalHours: settingsData.interval_hours ?? 1,
-              intervalMinutes: settingsData.interval_minutes ?? 30,
-              columnsToDisplay: settingsData.columns_to_display ?? 4,
+          // Lindungi itemConfigs agar tidak tertimpa race-condition jika baru saja ada perubahan delay lokal
+          const wasScheduleRecentlyUpdatedLocally = (Date.now() - lastScheduleOverrideUpdateRef.current) < 5000;
+
+          setConfig(prev => ({
+              baseBatchNumber: settingsData.base_batch_number || prev.baseBatchNumber,
+              baseStartTime: settingsData.base_start_time || prev.baseStartTime,
+              intervalHours: wasScheduleRecentlyUpdatedLocally ? prev.intervalHours : (settingsData.interval_hours ?? prev.intervalHours),
+              intervalMinutes: wasScheduleRecentlyUpdatedLocally ? prev.intervalMinutes : (settingsData.interval_minutes ?? prev.intervalMinutes),
+              columnsToDisplay: settingsData.columns_to_display ?? prev.columnsToDisplay,
               audioEnabled: true, // Auto-enable audio as requested
-              currentGrade: (settingsData.current_grade as GradeType) || 'SM',
-              isStopped: settingsData.is_stopped || false,
-              alertThresholdSeconds: settingsData.alert_threshold_seconds || 60,
-              runningText: settingsData.running_text || 'JIKA DELAY DIATAS 15 MENIT WAJIB ADJUST SCHEDULE!',
-              isMarqueePaused: settingsData.is_marquee_paused || false,
-              marqueeSpeed: settingsData.marquee_speed || 30,
-              theme: (settingsData.theme as 'light' | 'dark') || 'light',
-              alarmSound: (settingsData.alarm_sound as AlarmSoundType) || 'siren',
-              alertStyle: (settingsData.alert_style as AlertStyleType) || 'classic',
+              currentGrade: (settingsData.current_grade as GradeType) || prev.currentGrade,
+              isStopped: settingsData.is_stopped !== undefined ? settingsData.is_stopped : prev.isStopped,
+              alertThresholdSeconds: settingsData.alert_threshold_seconds || prev.alertThresholdSeconds,
+              runningText: settingsData.running_text || prev.runningText,
+              isMarqueePaused: settingsData.is_marquee_paused !== undefined ? settingsData.is_marquee_paused : prev.isMarqueePaused,
+              marqueeSpeed: settingsData.marquee_speed || prev.marqueeSpeed,
+              theme: (settingsData.theme as 'light' | 'dark') || prev.theme,
+              alarmSound: (settingsData.alarm_sound as AlarmSoundType) || prev.alarmSound,
+              alertStyle: (settingsData.alert_style as AlertStyleType) || prev.alertStyle,
               reactorNotes: notesMap,
-              itemConfigs: itemConfigsMap,
-              tableRowHeight: settingsData.table_row_height || 92,
-              tableFontSize: settingsData.table_font_size || 28,
-              batchDurationMinutes: settingsData.batch_duration_minutes || 120,
-              hiddenReactors: settingsData.hidden_reactors || [],
-              hiddenFields: settingsData.hidden_fields || [],
-              gradeMode: settingsData.grade_mode || 'normal'
-          });
+              itemConfigs: overridesLoaded
+                  ? (wasScheduleRecentlyUpdatedLocally ? { ...itemConfigsMap, ...prev.itemConfigs } : itemConfigsMap)
+                  : prev.itemConfigs,
+              tableRowHeight: settingsData.table_row_height || prev.tableRowHeight,
+              tableFontSize: settingsData.table_font_size || prev.tableFontSize,
+              batchDurationMinutes: settingsData.batch_duration_minutes || prev.batchDurationMinutes,
+              hiddenReactors: settingsData.hidden_reactors || prev.hiddenReactors,
+              hiddenFields: settingsData.hidden_fields || prev.hiddenFields,
+              gradeMode: settingsData.grade_mode || prev.gradeMode
+          }));
 
           // Load Zoom Level
           if (settingsData.zoom_level) {
@@ -1906,6 +1930,38 @@ const App: React.FC = () => {
             const activeEl = document.activeElement;
             const isFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
 
+            // Global Settings Sync (baseBatchNumber, baseStartTime, interval, etc)
+            if (!isFocused) {
+                const wasRecentlyUpdated = (Date.now() - lastScheduleOverrideUpdateRef.current) < 4000;
+                setConfig(prev => {
+                    const hasBatchChange = data.base_batch_number !== undefined && data.base_batch_number !== prev.baseBatchNumber;
+                    const hasTimeChange = data.base_start_time && data.base_start_time !== prev.baseStartTime;
+                    const hasIntervalHoursChange = !wasRecentlyUpdated && data.interval_hours !== undefined && data.interval_hours !== prev.intervalHours;
+                    const hasIntervalMinutesChange = !wasRecentlyUpdated && data.interval_minutes !== undefined && data.interval_minutes !== prev.intervalMinutes;
+                    const hasGradeChange = data.current_grade && data.current_grade !== prev.currentGrade;
+                    const hasStopChange = data.is_stopped !== undefined && data.is_stopped !== prev.isStopped;
+                    const hasRunningTextChange = data.running_text !== undefined && data.running_text !== prev.runningText;
+                    const hasSpeedChange = data.marquee_speed !== undefined && data.marquee_speed !== prev.marqueeSpeed;
+                    const hasMarqueePausedChange = data.is_marquee_paused !== undefined && data.is_marquee_paused !== prev.isMarqueePaused;
+
+                    if (hasBatchChange || hasTimeChange || hasIntervalHoursChange || hasIntervalMinutesChange || hasGradeChange || hasStopChange || hasRunningTextChange || hasSpeedChange || hasMarqueePausedChange) {
+                        return {
+                            ...prev,
+                            baseBatchNumber: data.base_batch_number ?? prev.baseBatchNumber,
+                            baseStartTime: data.base_start_time ?? prev.baseStartTime,
+                            intervalHours: !wasRecentlyUpdated && data.interval_hours !== undefined ? data.interval_hours : prev.intervalHours,
+                            intervalMinutes: !wasRecentlyUpdated && data.interval_minutes !== undefined ? data.interval_minutes : prev.intervalMinutes,
+                            currentGrade: data.current_grade ?? prev.currentGrade,
+                            isStopped: data.is_stopped !== undefined ? data.is_stopped : prev.isStopped,
+                            runningText: data.running_text ?? prev.runningText,
+                            marqueeSpeed: data.marquee_speed ?? prev.marqueeSpeed,
+                            isMarqueePaused: data.is_marquee_paused ?? prev.isMarqueePaused,
+                        };
+                    }
+                    return prev;
+                });
+            }
+
             // Silo State
             if (data.silo_state && !isFocused) {
                 const rawSiloState = data.silo_state || {};
@@ -1949,6 +2005,40 @@ const App: React.FC = () => {
         console.warn("[Firestore] app_settings onSnapshot listener error:", err);
     });
 
+    // Real-time listener on schedule_overrides collection
+    const unsubOverrides = onSnapshot(collection(db, 'schedule_overrides'), (snapshot) => {
+        if (snapshot.metadata.hasPendingWrites) {
+            return;
+        }
+        const updatedConfigs: Record<string, ItemConfig> = {};
+        snapshot.docs.forEach(docSnap => {
+            const row = docSnap.data();
+            updatedConfigs[docSnap.id] = {
+                overrideTime: row.override_time,
+                isSkipped: Boolean(row.is_skipped),
+                skipReason: row.skip_reason || 'PASS',
+                mode: row.mode || 'CLOSE',
+                grade: row.grade || 'SM',
+                note: row.note || '',
+                shiftSubsequent: Boolean(row.shift_subsequent),
+                manualDelayMinutes: Number(row.manual_delay_minutes) || 0,
+                stageInfo: row.stage_info || '',
+                customIntervalHours: ('custom_interval_hours' in row && row.custom_interval_hours !== null && row.custom_interval_hours !== undefined) ? Number(row.custom_interval_hours) : undefined,
+                customIntervalMinutes: ('custom_interval_minutes' in row && row.custom_interval_minutes !== null && row.custom_interval_minutes !== undefined) ? Number(row.custom_interval_minutes) : undefined
+            };
+        });
+
+        const wasRecentlyUpdated = (Date.now() - lastScheduleOverrideUpdateRef.current) < 4000;
+        setConfig(prev => ({
+            ...prev,
+            itemConfigs: wasRecentlyUpdated
+                ? { ...prev.itemConfigs, ...updatedConfigs }
+                : updatedConfigs
+        }));
+    }, (err) => {
+        console.warn("[Firestore] schedule_overrides onSnapshot listener error:", err);
+    });
+
     // Auto-refresh polling as fallback
     const interval = setInterval(() => {
         loadData(false);
@@ -1956,6 +2046,7 @@ const App: React.FC = () => {
     
     return () => {
         unsubSettings();
+        unsubOverrides();
         clearInterval(interval);
     };
   }, [loadData]);
@@ -1970,15 +2061,11 @@ const App: React.FC = () => {
 
   // --- Real-time / Periodic Saver Helpers ---
   
-  // Save specific global setting to Firestore (diblokir pada mode mobile/HP)
+  // Save specific global setting to Firestore
   const updateGlobalSetting = async (updates: Partial<any>): Promise<boolean> => {
-      if (isMobileScheduleReadOnly) {
-          console.warn("[Mode Mobile] Perubahan diblokir: aplikasi dalam mode hanya baca (read-only) di perangkat mobile.");
-          return false;
-      }
       try {
           const docRef = doc(db, 'app_settings', '1');
-          await setDoc(docRef, updates, { merge: true });
+          await setDoc(docRef, sanitizeFirestoreData(updates), { merge: true });
           return true;
       } catch (err) {
           console.error("Unexpected error updating settings in Firestore:", err);
@@ -2051,9 +2138,12 @@ const App: React.FC = () => {
 
   // --- Handlers ---
   const handleConfigChange = (key: keyof AppState, value: any) => {
-    if (isMobileScheduleReadOnly) return;
     const previousValue = config[key];
     setConfig((prev) => ({ ...prev, [key]: value }));
+
+    if (key === 'intervalHours' || key === 'intervalMinutes' || key === 'baseBatchNumber' || key === 'baseStartTime') {
+      lastScheduleOverrideUpdateRef.current = Date.now();
+    }
 
     // Map AppState keys to DB columns
     const dbMap: Partial<Record<keyof AppState, string>> = {
@@ -2216,6 +2306,7 @@ const App: React.FC = () => {
               overridesSnap.docs.forEach(d => batch.delete(d.ref));
               await batch.commit();
           }
+          lastScheduleOverrideUpdateRef.current = Date.now();
 
           // Update Local State
           setConfig(prev => ({
@@ -2249,7 +2340,6 @@ const App: React.FC = () => {
   };
   
   const toggleStop = () => {
-    if (isMobileScheduleReadOnly) return;
     const nextIsStopped = !config.isStopped;
     if (nextIsStopped) {
       const freezeTs = Date.now();
@@ -2279,16 +2369,19 @@ const App: React.FC = () => {
 
   /* Jika viewport diperkecil saat modal edit masih terbuka, tutup semua jalur
      mutasi schedule agar mode HP langsung benar-benar hanya-baca. */
+  const prevIsDesktopRef = useRef(isDesktop);
   useEffect(() => {
-      if (isDesktop) return;
-      setIsSettingsOpen(false);
-      setSelectedItem(null);
-      setEditingReactorNote(null);
-      setIsResetModalOpen(false);
-      setIsGradeChangeModalOpen(false);
-      setIsCatalystModalOpen(false);
-      setIsDemonomerPopupOpen(false);
-      setStartSiloData(null);
+      if (prevIsDesktopRef.current && !isDesktop) {
+          setIsSettingsOpen(false);
+          setSelectedItem(null);
+          setEditingReactorNote(null);
+          setIsResetModalOpen(false);
+          setIsGradeChangeModalOpen(false);
+          setIsCatalystModalOpen(false);
+          setIsDemonomerPopupOpen(false);
+          setStartSiloData(null);
+      }
+      prevIsDesktopRef.current = isDesktop;
   }, [isDesktop]);
 
   const toggleTheme = () => {
@@ -2296,45 +2389,57 @@ const App: React.FC = () => {
   };
 
   const toggleMarqueePause = () => {
-      if (isMobileScheduleReadOnly) return;
       handleConfigChange('isMarqueePaused', !config.isMarqueePaused);
   };
 
-  const getLocalIsoString = (date: Date) => {
-      const tzOffset = date.getTimezoneOffset() * 60000;
-      const localTime = new Date(date.getTime() - tzOffset);
-      return localTime.toISOString().slice(0, 16);
+  const toLocalIso = (date: Date): string => {
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const y = date.getFullYear();
+      const m = pad(date.getMonth() + 1);
+      const d = pad(date.getDate());
+      const hh = pad(date.getHours());
+      const mm = pad(date.getMinutes());
+      return `${y}-${m}-${d}T${hh}:${mm}`;
   };
+
+  const parseLocalIso = (isoString: string): Date => {
+      if (!isoString) return new Date();
+      const [datePart, timePart] = isoString.split('T');
+      if (!datePart) return new Date();
+      const [y, m, d] = datePart.split('-').map(Number);
+      const [hh, mm] = (timePart || '00:00').split(':').map(Number);
+      return new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
+  };
+
+  const addMinutesToLocalIso = (isoString: string, minutes: number): string => {
+      const date = parseLocalIso(isoString);
+      date.setMinutes(date.getMinutes() + minutes);
+      return toLocalIso(date);
+  };
+
+  const getLocalIsoString = (date: Date) => toLocalIso(date);
 
   const adjustResetParamsTime = (minutes: number) => {
       try {
-          const currentDate = resetParams.time ? new Date(resetParams.time) : new Date();
-          if (isNaN(currentDate.getTime())) {
-              const now = new Date();
-              const adjusted = new Date(now.getTime() + minutes * 60000);
-              setResetParams(prev => ({ ...prev, time: getLocalIsoString(adjusted) }));
-          } else {
-              const adjusted = new Date(currentDate.getTime() + minutes * 60000);
-              setResetParams(prev => ({ ...prev, time: getLocalIsoString(adjusted) }));
-          }
+          const currentIso = resetParams.time || toLocalIso(new Date());
+          setResetParams(prev => ({ ...prev, time: addMinutesToLocalIso(currentIso, minutes) }));
       } catch (e) {
           console.error(e);
       }
   };
 
   const handleResetSequence = (item?: ScheduleItem) => {
-      if (isMobileScheduleReadOnly) return;
       let batchVal = config.baseBatchNumber;
       let localIso = '';
 
       if (item && item.startTime) {
           batchVal = item.batchNumber || config.baseBatchNumber;
-          localIso = getLocalIsoString(item.startTime);
+          localIso = toLocalIso(item.startTime);
       } else {
           const n = new Date();
           const coeff = 1000 * 60 * 5;
           const rounded = new Date(Math.round(n.getTime() / coeff) * coeff);
-          localIso = getLocalIsoString(rounded);
+          localIso = toLocalIso(rounded);
       }
       
       setResetParams({
@@ -2345,12 +2450,11 @@ const App: React.FC = () => {
   };
 
   const submitResetSequence = async () => {
-      if (isMobileScheduleReadOnly) return;
       try {
           if (!resetParams.time) {
               return;
           }
-          const parsedDate = new Date(resetParams.time);
+          const parsedDate = parseLocalIso(resetParams.time);
           if (isNaN(parsedDate.getTime())) {
               return;
           }
@@ -2374,6 +2478,7 @@ const App: React.FC = () => {
               overridesSnap.docs.forEach(d => batch.delete(d.ref));
               await batch.commit();
           }
+          lastScheduleOverrideUpdateRef.current = Date.now();
 
           // Update Local State
           setConfig(prev => ({
@@ -2530,7 +2635,6 @@ const App: React.FC = () => {
   };
 
   const handleCycleTimeChange = (id: number, field: string, value: string) => {
-      if (isMobileScheduleReadOnly) return;
       lastCycleTimeUpdateRef.current = Date.now();
       const previousRow = cycleTimeData.find(row => row.id === id);
       const newData = cycleTimeData.map(row => row.id === id ? { ...row, [field]: value } : row);
@@ -2759,7 +2863,6 @@ const App: React.FC = () => {
 
   // --- Modal Handlers ---
   const openRescheduleModal = (item: ScheduleItem) => {
-    if (isMobileScheduleReadOnly) return;
     setSelectedItem(item);
     setShouldBlinkNote(true);
     setTimeout(() => setShouldBlinkNote(false), 5000);
@@ -2768,7 +2871,7 @@ const App: React.FC = () => {
     const itemConfig = config.itemConfigs[item.id] || {};
     
     // Calculate local ISO string for input
-    const localIso = new Date(item.startTime.getTime() - (item.startTime.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    const localIso = toLocalIso(item.startTime);
 
     // If first reactor in cycle 1, sync resetParams
     if (item.reactorId === REACTORS[0].id && item.cycleIndex === 0) {
@@ -2785,7 +2888,7 @@ const App: React.FC = () => {
       skipReason: itemConfig.skipReason || 'PASS',
       mode: itemConfig.mode || 'CLOSE',
       grade: itemConfig.grade || item.grade, 
-      shiftSubsequent: itemConfig.shiftSubsequent || false,
+      shiftSubsequent: itemConfig.shiftSubsequent !== undefined ? itemConfig.shiftSubsequent : true,
       delayHours: 0,
       delayMinutes: 0,
       manualDelayMinutes: itemConfig.manualDelayMinutes || 0,
@@ -2802,27 +2905,24 @@ const App: React.FC = () => {
 
   const handleModeChange = (newMode: 'OPEN' | 'CLOSE' | 'CLOSE TO OPEN') => {
     if (newMode === editForm.mode) return;
-    const currentDate = new Date(editForm.timeValue);
-    let newDate = new Date(currentDate);
+    let newIso = editForm.timeValue;
 
     if (newMode === 'OPEN') {
       // If switching from CLOSE or CLOSE TO OPEN to OPEN, subtract 30 mins
       if (editForm.mode === 'CLOSE' || editForm.mode === 'CLOSE TO OPEN') {
-        newDate = addMinutes(newDate, -30);
+        newIso = addMinutesToLocalIso(newIso, -30);
       }
     } else if (newMode === 'CLOSE' || newMode === 'CLOSE TO OPEN') {
       // If switching from OPEN to CLOSE or CLOSE TO OPEN, add 30 mins
       if (editForm.mode === 'OPEN') {
-        newDate = addMinutes(newDate, 30);
+        newIso = addMinutesToLocalIso(newIso, 30);
       }
     }
-    
-    const localIso = new Date(newDate.getTime() - (newDate.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
     
     setEditForm(prev => ({
       ...prev,
       mode: newMode,
-      timeValue: localIso
+      timeValue: newIso
     }));
   };
 
@@ -2830,34 +2930,44 @@ const App: React.FC = () => {
     const totalMinutes = (editForm.delayHours * 60) + editForm.delayMinutes;
     if (totalMinutes === 0) return;
 
-    const current = new Date(editForm.timeValue);
-    const delayed = addMinutes(current, totalMinutes);
-    const localIso = new Date(delayed.getTime() - (delayed.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    const newIso = addMinutesToLocalIso(editForm.timeValue, totalMinutes);
     
     setEditForm(prev => ({
       ...prev,
-      timeValue: localIso,
+      timeValue: newIso,
       delayHours: 0,
       delayMinutes: 0, 
-      manualDelayMinutes: (prev.manualDelayMinutes || 0) + totalMinutes 
+      manualDelayMinutes: (prev.manualDelayMinutes || 0) + totalMinutes,
+      shiftSubsequent: true
     }));
   };
 
   const saveReschedule = async () => {
-    if (isMobileScheduleReadOnly) return;
     if (selectedItem && editForm.timeValue) {
-      const newDate = new Date(editForm.timeValue);
+      // 1. Tangani jika operator menginput jam/menit delay namun belum menekan tombol APPLY
+      let finalTimeValue = editForm.timeValue;
+      let finalManualDelay = Number(editForm.manualDelayMinutes) || 0;
+      const unappliedMinutes = (Number(editForm.delayHours) * 60) + Number(editForm.delayMinutes);
+      if (unappliedMinutes > 0) {
+        finalTimeValue = addMinutesToLocalIso(finalTimeValue, unappliedMinutes);
+        finalManualDelay += unappliedMinutes;
+      }
+
+      const newDate = parseLocalIso(finalTimeValue);
       
+      const targetGrade = editForm.grade || selectedItem.grade || config.currentGrade || 'SM';
       const newConfig: ItemConfig = {
         overrideTime: newDate.toISOString(),
-        note: editForm.note,
-        isSkipped: editForm.isSkipped,
-        skipReason: editForm.skipReason,
-        mode: editForm.mode,
-        grade: editForm.grade !== config.currentGrade ? editForm.grade : undefined,
-        shiftSubsequent: editForm.shiftSubsequent,
-        manualDelayMinutes: editForm.manualDelayMinutes,
-        stageInfo: editForm.stageInfo
+        note: editForm.note || '',
+        isSkipped: Boolean(editForm.isSkipped),
+        skipReason: editForm.skipReason || 'PASS',
+        mode: editForm.mode || 'CLOSE',
+        grade: targetGrade,
+        shiftSubsequent: Boolean(editForm.shiftSubsequent),
+        manualDelayMinutes: finalManualDelay,
+        stageInfo: editForm.stageInfo || '',
+        customIntervalHours: editForm.hasCustomInterval ? editForm.customIntervalHours : undefined,
+        customIntervalMinutes: editForm.hasCustomInterval ? editForm.customIntervalMinutes : undefined
       };
 
       const previousConfig = config.itemConfigs[selectedItem.id] || selectedItem.config || null;
@@ -2866,7 +2976,7 @@ const App: React.FC = () => {
           reactorId: selectedItem.reactorId,
           batchNumber: selectedItem.batchNumber,
           startTime: selectedItem.startTime.toISOString(),
-          grade: selectedItem.grade,
+          grade: selectedItem.grade || targetGrade,
           config: cloneAuditValue(previousConfig),
         },
       };
@@ -2875,7 +2985,7 @@ const App: React.FC = () => {
           reactorId: selectedItem.reactorId,
           batchNumber: selectedItem.batchNumber,
           startTime: newDate.toISOString(),
-          grade: editForm.grade,
+          grade: targetGrade,
           config: cloneAuditValue(newConfig),
         },
       };
@@ -2894,16 +3004,17 @@ const App: React.FC = () => {
         for (const item of alreadyStartedItems) {
           const existingConfig = config.itemConfigs[item.id];
           const hasTimeOverride = !!existingConfig?.overrideTime;
+          const frozenGrade = existingConfig?.grade || item.grade || config.currentGrade || 'SM';
 
           const frozenConfig: ItemConfig = {
-            overrideTime: hasTimeOverride ? existingConfig.overrideTime : item.startTime.toISOString(),
+            overrideTime: hasTimeOverride ? existingConfig.overrideTime : (item.startTime ? item.startTime.toISOString() : new Date().toISOString()),
             note: existingConfig?.note || '',
-            isSkipped: existingConfig?.isSkipped || false,
+            isSkipped: Boolean(existingConfig?.isSkipped),
             skipReason: existingConfig?.skipReason || 'PASS',
             mode: existingConfig?.mode || 'CLOSE',
-            grade: existingConfig?.grade,
+            grade: frozenGrade,
             shiftSubsequent: true,
-            manualDelayMinutes: existingConfig?.manualDelayMinutes || 0,
+            manualDelayMinutes: Number(existingConfig?.manualDelayMinutes) || 0,
             stageInfo: existingConfig?.stageInfo || ''
           };
 
@@ -2911,38 +3022,41 @@ const App: React.FC = () => {
           auditBeforeItems[item.id] = {
             reactorId: item.reactorId,
             batchNumber: item.batchNumber,
-            startTime: item.startTime.toISOString(),
-            grade: item.grade,
+            startTime: item.startTime ? item.startTime.toISOString() : '',
+            grade: frozenGrade,
             config: cloneAuditValue(existingConfig || null),
           };
           auditAfterItems[item.id] = {
             reactorId: item.reactorId,
             batchNumber: item.batchNumber,
             startTime: frozenConfig.overrideTime,
-            grade: frozenConfig.grade || item.grade,
+            grade: frozenGrade,
             config: cloneAuditValue(frozenConfig),
           };
-          dbUpserts.push({
+          dbUpserts.push(sanitizeFirestoreData({
             id: item.id,
             override_time: frozenConfig.overrideTime,
-            is_skipped: frozenConfig.isSkipped,
-            skip_reason: frozenConfig.skipReason,
-            mode: frozenConfig.mode,
-            grade: frozenConfig.grade,
-            note: frozenConfig.note,
-            shift_subsequent: frozenConfig.shiftSubsequent,
-            manual_delay_minutes: frozenConfig.manualDelayMinutes,
-            stage_info: frozenConfig.stageInfo,
-            updated_at: new Date()
-          });
+            is_skipped: Boolean(frozenConfig.isSkipped),
+            skip_reason: frozenConfig.skipReason || 'PASS',
+            mode: frozenConfig.mode || 'CLOSE',
+            grade: frozenGrade,
+            note: frozenConfig.note || '',
+            shift_subsequent: Boolean(frozenConfig.shiftSubsequent),
+            manual_delay_minutes: Number(frozenConfig.manualDelayMinutes) || 0,
+            stage_info: frozenConfig.stageInfo || '',
+            updated_at: new Date().toISOString()
+          }));
         }
 
         // Also update the global settings in database
-        await updateGlobalSetting({
+        void updateGlobalSetting({
           interval_hours: editForm.customIntervalHours,
           interval_minutes: editForm.customIntervalMinutes
         });
       }
+
+      // Catat waktu perubahan lokal untuk mencegah race condition penimpaan data
+      lastScheduleOverrideUpdateRef.current = Date.now();
 
       // Optimistic Update
       setConfig(prev => ({
@@ -2956,19 +3070,21 @@ const App: React.FC = () => {
         }
       }));
 
-      const selectedItemUpsert = {
+      const selectedItemUpsert = sanitizeFirestoreData({
           id: selectedItem.id,
           override_time: newConfig.overrideTime,
-          is_skipped: newConfig.isSkipped,
-          skip_reason: newConfig.skipReason,
-          mode: newConfig.mode,
-          grade: newConfig.grade,
-          note: newConfig.note,
-          shift_subsequent: newConfig.shiftSubsequent,
-          manual_delay_minutes: newConfig.manualDelayMinutes,
-          stage_info: newConfig.stageInfo,
+          is_skipped: Boolean(newConfig.isSkipped),
+          skip_reason: newConfig.skipReason || 'PASS',
+          mode: newConfig.mode || 'CLOSE',
+          grade: targetGrade,
+          note: newConfig.note || '',
+          shift_subsequent: Boolean(newConfig.shiftSubsequent),
+          manual_delay_minutes: finalManualDelay,
+          stage_info: newConfig.stageInfo || '',
+          custom_interval_hours: editForm.hasCustomInterval && editForm.customIntervalHours !== undefined ? Number(editForm.customIntervalHours) : null,
+          custom_interval_minutes: editForm.hasCustomInterval && editForm.customIntervalMinutes !== undefined ? Number(editForm.customIntervalMinutes) : null,
           updated_at: new Date().toISOString()
-      };
+      });
 
       const allUpserts = [...dbUpserts, selectedItemUpsert];
 
@@ -2979,8 +3095,9 @@ const App: React.FC = () => {
               batch.set(doc(db, 'schedule_overrides', item.id), item, { merge: true });
           });
           await batch.commit();
+          lastScheduleOverrideUpdateRef.current = Date.now();
 
-          const delay = editForm.manualDelayMinutes || 0;
+          const delay = finalManualDelay;
           void writeAuditLog({
               eventType: 'schedule.updated',
               entityType: 'schedule_override',
@@ -3004,8 +3121,8 @@ const App: React.FC = () => {
   };
 
   const clearOverride = async () => {
-    if (isMobileScheduleReadOnly) return;
     if (selectedItem) {
+      lastScheduleOverrideUpdateRef.current = Date.now();
       // Optimistic
       const newConfigs = { ...config.itemConfigs };
       delete newConfigs[selectedItem.id];
@@ -3014,6 +3131,7 @@ const App: React.FC = () => {
       // Delete from Firestore
       try {
           await deleteDoc(doc(db, 'schedule_overrides', selectedItem.id));
+          lastScheduleOverrideUpdateRef.current = Date.now();
           void writeAuditLog({
               eventType: 'schedule.override_cleared',
               entityType: 'schedule_override',
@@ -3237,29 +3355,32 @@ const App: React.FC = () => {
     });
   }, [now, scheduleMatrix, config.batchDurationMinutes]);
 
+  const scrollToNowPositionRef = useRef(scrollToNowPosition);
+  scrollToNowPositionRef.current = scrollToNowPosition;
+
   const handleTimelineScroll = useCallback(() => {
-    setIsUserScrollingTimeline(true);
+    setIsUserScrollingTimeline(prev => (prev ? prev : true));
     if (scrollInactivityTimerRef.current) {
       clearTimeout(scrollInactivityTimerRef.current);
     }
     scrollInactivityTimerRef.current = setTimeout(() => {
       setIsUserScrollingTimeline(false);
-      scrollToNowPosition(true);
+      scrollToNowPositionRef.current(true);
     }, 6000); // Auto-return to LIVE NOW position after 6s of inactivity
-  }, [scrollToNowPosition]);
+  }, []);
 
   useEffect(() => {
     if (currentView === 'scheduler') {
       const isFirst = !hasInitialScrolledTimelineRef.current;
       const timer = setTimeout(() => {
-        scrollToNowPosition(!isFirst);
+        scrollToNowPositionRef.current(!isFirst);
         hasInitialScrolledTimelineRef.current = true;
       }, 150);
       return () => clearTimeout(timer);
     } else {
       hasInitialScrolledTimelineRef.current = false;
     }
-  }, [currentView, scrollToNowPosition]);
+  }, [currentView]);
 
   /* Tabel scheduler saat layar sempit: kolom paling kiri berisi batch yang
      sudah lewat, sehingga jadwal yang akan start tertutup dan harus digeser
@@ -3596,8 +3717,8 @@ const App: React.FC = () => {
           // Trigger Desktop Notification when tab is minimized, in background, or inactive
           if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
               try {
-                  const secondsUntilStart = Math.max(0, Math.ceil((fullScreenAlertItem.startTime.getTime() - now.getTime()) / 1000));
-                  const openModeReminder = shouldShowOpenModeReminder(fullScreenAlertItem, now)
+                  const secondsUntilStart = Math.max(0, Math.ceil((fullScreenAlertItem.startTime.getTime() - Date.now()) / 1000));
+                  const openModeReminder = shouldShowOpenModeReminder(fullScreenAlertItem, new Date())
                       ? ' CEK HWD LEVEL SEBELUM START.'
                       : '';
                   const notif = new Notification(`⚠️ PERINGATAN: START REAKTOR ${fullScreenAlertItem.reactorId}`, {
@@ -3614,10 +3735,10 @@ const App: React.FC = () => {
                   console.warn("Desktop notification trigger failed:", e);
               }
           }
-      } else if (!fullScreenAlertItem) {
+      } else if (!fullScreenAlertItem && lastAlertedId !== null) {
           setLastAlertedId(null);
       }
-  }, [fullScreenAlertItem, lastAlertedId, config.audioEnabled, config.alarmSound, now]);
+  }, [fullScreenAlertItem?.id, lastAlertedId, config.audioEnabled, config.alarmSound]);
 
   // Tab Title Flashing during Full Screen Alert
   useEffect(() => {

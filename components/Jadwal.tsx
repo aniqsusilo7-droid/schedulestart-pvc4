@@ -326,6 +326,8 @@ interface JadwalProps {
   onFocusTargetHandled?: () => void;
 }
 
+const EMPTY_OVERTIME_TABLES: OvertimeTable[] = [];
+
 export const Jadwal: React.FC<JadwalProps> = ({
   activeGroup,
   focusTarget,
@@ -346,7 +348,7 @@ export const Jadwal: React.FC<JadwalProps> = ({
   });
 
   // Current active group's tables
-  const tables = groupsData[activeGroup] || [];
+  const tables = groupsData[activeGroup] || EMPTY_OVERTIME_TABLES;
   const activeTableId = activeTableIdPerGroup[activeGroup] || tables[0]?.id || '';
 
   const setActiveTableId = (newTblId: string) => {
@@ -697,16 +699,27 @@ export const Jadwal: React.FC<JadwalProps> = ({
       return;
     }
 
+    const tableExists = tables.some(t => t.id === latestTarget.tableId);
+    if (!tableExists) {
+      handledFocusTargetRef.current = focusTarget.requestId;
+      onFocusTargetHandled?.();
+      return;
+    }
+
     if (activeTable.id !== latestTarget.tableId) {
       setActiveTableId(latestTarget.tableId);
       return;
     }
 
-    const targetColumn = activeTable.columns.find(column => column.id === latestTarget.columnId);
-    if (!targetColumn) return;
-
-    const timer = window.setTimeout(() => {
+    const targetColumn = activeTable.columns?.find(column => column.id === latestTarget.columnId);
+    if (!targetColumn) {
       handledFocusTargetRef.current = focusTarget.requestId;
+      onFocusTargetHandled?.();
+      return;
+    }
+
+    handledFocusTargetRef.current = focusTarget.requestId;
+    const timer = window.setTimeout(() => {
       const cellId = `backup-cell-${activeGroup}-${latestTarget.tableId}-${latestTarget.columnId}-${latestTarget.rowIndex}`;
       document.getElementById(cellId)?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
       openCellModal(targetColumn.id, targetColumn.name, latestTarget.rowIndex);

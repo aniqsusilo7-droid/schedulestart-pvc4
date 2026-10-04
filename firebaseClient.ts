@@ -1,6 +1,9 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { 
-  initializeFirestore, 
+  initializeFirestore,
+  getFirestore,
+  persistentLocalCache,
   doc, 
   setDoc, 
   updateDoc, 
@@ -20,24 +23,21 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from './firebase-applet-config.json';
 
-// Initialize Firebase
-const app = initializeApp({
-  apiKey: firebaseConfig.apiKey,
-  authDomain: firebaseConfig.authDomain,
-  projectId: firebaseConfig.projectId,
-  storageBucket: firebaseConfig.storageBucket,
-  messagingSenderId: firebaseConfig.messagingSenderId,
-  appId: firebaseConfig.appId,
-});
+// Initialize Firebase App
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Initialize Firestore with custom database ID and forced long polling for reliable iframe/proxy connections
-export const db = initializeFirestore(
-  app, 
-  {
-    experimentalForceLongPolling: true
-  },
-  firebaseConfig.firestoreDatabaseId || "(default)"
-);
+// Initialize Firestore with custom database ID and fast persistent local cache for instant feedback
+let dbInstance;
+try {
+  dbInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({})
+  }, firebaseConfig.firestoreDatabaseId);
+} catch {
+  dbInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+}
+
+export const db = dbInstance;
+export const auth = getAuth(app);
 
 export {
   doc,
@@ -57,3 +57,4 @@ export {
   onSnapshot,
   serverTimestamp
 };
+
