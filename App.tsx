@@ -12,6 +12,7 @@ import { JadwalShift } from './components/JadwalShift';
 import { Sidebar, SidebarView, GroupedView } from './components/Sidebar';
 import { useMediaQuery, DESKTOP_QUERY } from './utils/useMediaQuery';
 import { getShiftGroupsNow, getAdministrativeShiftDate, getActiveShifts, SHIFT_SLOTS, ShiftGroup } from './utils/shiftSchedule';
+import { getHolidayForDate } from './utils/indonesianHolidays';
 import { shouldShowOpenModeReminder } from './utils/openModeReminder';
 import type { BackupQuotaResult } from './utils/backupSchedule';
 import { Settings, RefreshCw, AlertTriangle, Calendar, CalendarDays, Hash, Volume2, VolumeX, Edit3, X, PlayCircle, Clock as ClockIcon, FileText, Ban, FastForward, PauseCircle, ArrowRightCircle, CheckCircle2, Wrench, RotateCcw, Power, Bell, Timer, ChevronDown, ChevronUp, Info, Tag, ArrowRight, ArrowRightLeft, LayoutGrid, Activity, Database, Type, Sun, Moon, Pause, Play, Save, Gauge, Move, ArrowUp, ArrowDown, Palette, ZoomIn, ZoomOut, Monitor, Maximize2, Check, Calculator, StickyNote, Handshake, Trash2, Sliders, Eye, Sparkles, ShieldAlert, TrendingUp, Wallet, Menu, History, Lock } from 'lucide-react';
@@ -72,6 +73,7 @@ const ShiftToday: React.FC<{ date: Date; className?: string }> = ({ date, classN
   const assignment = getShiftGroupsNow(date);
   const administrativeDate = getAdministrativeShiftDate(date);
   const active = getActiveShifts(date);
+  const todayHoliday = getHolidayForDate(administrativeDate);
   const [hours, minutes, seconds] = date
     .toLocaleTimeString('en-GB', { hour12: false })
     .split(':');
@@ -89,6 +91,26 @@ const ShiftToday: React.FC<{ date: Date; className?: string }> = ({ date, classN
         <span className="text-[0.95em] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 whitespace-nowrap leading-none">
           {formatDate(administrativeDate)}
         </span>
+        {todayHoliday && (
+          <span
+            title={`${todayHoliday.name} (${
+              todayHoliday.type === 'national'
+                ? 'Libur Nasional'
+                : todayHoliday.type === 'joint_leave'
+                  ? 'Cuti Bersama'
+                  : 'Libur Asahi'
+            })`}
+            className={`text-[0.45em] font-black uppercase tracking-wider px-1.5 py-0.5 rounded whitespace-nowrap shadow-sm ${
+              todayHoliday.type === 'national'
+                ? 'bg-rose-500 text-white'
+                : todayHoliday.type === 'joint_leave'
+                  ? 'bg-amber-400 text-amber-950'
+                  : 'bg-emerald-600 text-white'
+            }`}
+          >
+            {todayHoliday.name}
+          </span>
+        )}
         <span aria-hidden="true" className="h-[1.1em] w-px bg-slate-300 dark:bg-slate-700" />
         <time
           dateTime={date.toISOString()}
@@ -1406,7 +1428,7 @@ const App: React.FC = () => {
     timeValue: string;
     note: string;
     isSkipped: boolean;
-    skipReason: 'PASS' | 'CLEANING_ROBOT' | 'ABNORMAL_REAKSI' | 'MAINTENANCE';
+    skipReason: 'PASS' | 'CLEANING_ROBOT' | 'ABNORMAL_REAKSI' | 'MAINTENANCE' | 'POISON_CHARGE';
     mode: 'OPEN' | 'CLOSE' | 'CLOSE TO OPEN';
     grade: GradeType;
     shiftSubsequent: boolean;
@@ -2963,7 +2985,7 @@ const App: React.FC = () => {
         skipReason: editForm.skipReason || 'PASS',
         mode: editForm.mode || 'CLOSE',
         grade: targetGrade,
-        shiftSubsequent: Boolean(editForm.shiftSubsequent),
+        shiftSubsequent: editForm.isSkipped ? true : Boolean(editForm.shiftSubsequent),
         manualDelayMinutes: finalManualDelay,
         stageInfo: editForm.stageInfo || '',
         customIntervalHours: editForm.hasCustomInterval ? editForm.customIntervalHours : undefined,
@@ -2992,6 +3014,48 @@ const App: React.FC = () => {
 
       const newConfigs = { ...config.itemConfigs };
       const dbUpserts: any[] = [];
+
+      // Ketika status diubah selain active (CLEANING_ROBOT, PASS, dll),
+      // jam start dan no batch reaktor ini otomatis berpindah ke reaktor berikutnya
+      if (editForm.isSkipped) {
+        const currIdx = REACTORS.findIndex(r => r.id === selectedItem.reactorId);
+        const nextReactor = REACTORS[(currIdx + 1) % REACTORS.length];
+        const nextId = `${nextReactor.id}-${selectedItem.batchNumber}`;
+        const existingNextConfig = config.itemConfigs[nextId];
+        
+        const transferredTime = newDate.toISOString();
+        const nextManualDelay = Number(existingNextConfig?.manualDelayMinutes) || 0;
+        const nextEffectiveTime = nextManualDelay > 0
+          ? addMinutesToLocalIso(transferredTime, nextManualDelay)
+          : transferredTime;
+
+        const nextConfig: ItemConfig = {
+          overrideTime: nextEffectiveTime,
+          note: existingNextConfig?.note || '',
+          isSkipped: Boolean(existingNextConfig?.isSkipped),
+          skipReason: existingNextConfig?.skipReason || 'PASS',
+          mode: existingNextConfig?.mode || 'CLOSE',
+          grade: existingNextConfig?.grade || targetGrade,
+          shiftSubsequent: true,
+          manualDelayMinutes: nextManualDelay,
+          stageInfo: existingNextConfig?.stageInfo || '',
+        };
+
+        newConfigs[nextId] = nextConfig;
+        dbUpserts.push(sanitizeFirestoreData({
+          id: nextId,
+          override_time: nextConfig.overrideTime,
+          is_skipped: Boolean(nextConfig.isSkipped),
+          skip_reason: nextConfig.skipReason || 'PASS',
+          mode: nextConfig.mode || 'CLOSE',
+          grade: nextConfig.grade,
+          note: nextConfig.note || '',
+          shift_subsequent: true,
+          manual_delay_minutes: nextManualDelay,
+          stage_info: nextConfig.stageInfo || '',
+          updated_at: new Date().toISOString()
+        }));
+      }
 
       if (editForm.hasCustomInterval) {
         // Find already started items in scheduleMatrix (status === 'past' || status === 'active')
@@ -3165,6 +3229,9 @@ const App: React.FC = () => {
 
     REACTORS.forEach(r => matrix[r.id] = []);
 
+    let prevWasSkipped = false;
+    let prevSkippedTime = 0;
+
     for (let col = 0; col < config.columnsToDisplay; col++) {
       for (let rIndex = 0; rIndex < REACTORS.length; rIndex++) {
         const reactor = REACTORS[rIndex];
@@ -3181,10 +3248,16 @@ const App: React.FC = () => {
 
         let originalTime = new Date(sequenceCursor);
         let effectiveTime = originalTime;
+        const isSkipped = itemConfig?.isSkipped || false;
 
-        if (itemConfig?.overrideTime) {
+        if (prevWasSkipped) {
+            // Ketika reaktor sebelumnya berstatus selain active (CLEANING_ROBOT, PASS, MAINTENANCE, dll),
+            // jam start dan nomor batch langsung berpindah ke reaktor ini
+            effectiveTime = new Date(prevSkippedTime + (Number(itemConfig?.manualDelayMinutes) || 0) * 60000);
+            sequenceCursor = effectiveTime.getTime();
+        } else if (itemConfig?.overrideTime) {
             const overrideDate = new Date(itemConfig.overrideTime);
-            if (itemConfig.shiftSubsequent) {
+            if (itemConfig.shiftSubsequent || itemConfig.isSkipped) {
                 const diff = overrideDate.getTime() - effectiveTime.getTime();
                 sequenceCursor += diff; 
             }
@@ -3193,11 +3266,15 @@ const App: React.FC = () => {
 
         const deltaMinutes = Math.round((effectiveTime.getTime() - originalTime.getTime()) / 60000);
         let status: 'past' | 'active' | 'future' | 'skipped' = 'future';
-        const isSkipped = itemConfig?.isSkipped || false;
 
         if (isSkipped) {
             status = 'skipped';
+            // Simpan waktu reaktor yang di-skip agar langsung diwariskan ke reaktor berikutnya
+            prevWasSkipped = true;
+            prevSkippedTime = effectiveTime.getTime();
+            sequenceCursor = prevSkippedTime;
         } else {
+            prevWasSkipped = false;
             const diffSeconds = (now.getTime() - effectiveTime.getTime()) / 1000;
             if (diffSeconds > 60) {
                 status = 'past';
@@ -3481,7 +3558,7 @@ const App: React.FC = () => {
 
           if (itemConfig?.overrideTime) {
               const overrideDate = new Date(itemConfig.overrideTime);
-              if (itemConfig.shiftSubsequent) {
+              if (itemConfig.shiftSubsequent || itemConfig.isSkipped) {
                   const diff = overrideDate.getTime() - effectiveTime.getTime();
                   sequenceCursor += diff; 
               }
@@ -3495,7 +3572,9 @@ const App: React.FC = () => {
             isSkipped
           });
 
-          if (!isSkipped) {
+          if (isSkipped) {
+              sequenceCursor = effectiveTime.getTime();
+          } else {
               sequenceCursor += (runningIntervalMinutes * 60000);
               lastAddedIntervalMinutes = runningIntervalMinutes;
               currentBatch++;
@@ -6652,7 +6731,7 @@ const App: React.FC = () => {
                                 </span>
                             </h3>
                             <p className="text-[11px] sm:text-sm font-bold text-slate-400">
-                                Reaktor {selectedItem.reactorId} &bull; Batch {selectedItem.batchNumber || '---'}
+                                Reaktor {selectedItem.reactorId} &bull; {selectedItem.status === 'skipped' ? (selectedItem.config?.skipReason?.replace(/_/g, ' ') || 'SKIPPED') : `Batch ${selectedItem.batchNumber || '---'}`}
                             </p>
                         </div>
                         <button onClick={closeRescheduleModal} className="text-slate-400 hover:text-white transition-colors">
@@ -6724,6 +6803,12 @@ const App: React.FC = () => {
                                     <option value="MAINTENANCE">MAINTENANCE</option>
                                     <option value="POISON_CHARGE">POISON CHARGE</option>
                                 </select>
+                                {editForm.isSkipped && (
+                                    <div className="flex items-center gap-1.5 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-300 font-bold text-[10px] leading-tight">
+                                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                                        <span>Jam start ({formatTime(selectedItem.startTime)}) &amp; No. Batch (#{selectedItem.batchNumber}) berpindah ke reaktor berikutnya.</span>
+                                    </div>
+                                )}
                              </div>
                              <div className="flex flex-col gap-2 sm:gap-3">
                                 <label className="text-[11px] sm:text-sm font-black text-slate-500 dark:text-slate-400 uppercase">Mode</label>
