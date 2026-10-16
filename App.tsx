@@ -42,7 +42,7 @@ const STAGE_OPTIONS = ['Sample Blowing', 'Sample Washing', 'Sample Air Slurry'];
 
 /* Lebar tabel scheduler di HP. Kolom reaktor dipersempit dan dibuat sticky,
    sisanya digeser horizontal. */
-const MOBILE_REACTOR_COL = 56;
+const MOBILE_REACTOR_COL = 45;
 const MOBILE_CELL_MIN = 104;
 
 /* Label & ikon tiap halaman, dipakai breadcrumb di header. */
@@ -3015,48 +3015,6 @@ const App: React.FC = () => {
       const newConfigs = { ...config.itemConfigs };
       const dbUpserts: any[] = [];
 
-      // Ketika status diubah selain active (CLEANING_ROBOT, PASS, dll),
-      // jam start dan no batch reaktor ini otomatis berpindah ke reaktor berikutnya
-      if (editForm.isSkipped) {
-        const currIdx = REACTORS.findIndex(r => r.id === selectedItem.reactorId);
-        const nextReactor = REACTORS[(currIdx + 1) % REACTORS.length];
-        const nextId = `${nextReactor.id}-${selectedItem.batchNumber}`;
-        const existingNextConfig = config.itemConfigs[nextId];
-        
-        const transferredTime = newDate.toISOString();
-        const nextManualDelay = Number(existingNextConfig?.manualDelayMinutes) || 0;
-        const nextEffectiveTime = nextManualDelay > 0
-          ? addMinutesToLocalIso(transferredTime, nextManualDelay)
-          : transferredTime;
-
-        const nextConfig: ItemConfig = {
-          overrideTime: nextEffectiveTime,
-          note: existingNextConfig?.note || '',
-          isSkipped: Boolean(existingNextConfig?.isSkipped),
-          skipReason: existingNextConfig?.skipReason || 'PASS',
-          mode: existingNextConfig?.mode || 'CLOSE',
-          grade: existingNextConfig?.grade || targetGrade,
-          shiftSubsequent: true,
-          manualDelayMinutes: nextManualDelay,
-          stageInfo: existingNextConfig?.stageInfo || '',
-        };
-
-        newConfigs[nextId] = nextConfig;
-        dbUpserts.push(sanitizeFirestoreData({
-          id: nextId,
-          override_time: nextConfig.overrideTime,
-          is_skipped: Boolean(nextConfig.isSkipped),
-          skip_reason: nextConfig.skipReason || 'PASS',
-          mode: nextConfig.mode || 'CLOSE',
-          grade: nextConfig.grade,
-          note: nextConfig.note || '',
-          shift_subsequent: true,
-          manual_delay_minutes: nextManualDelay,
-          stage_info: nextConfig.stageInfo || '',
-          updated_at: new Date().toISOString()
-        }));
-      }
-
       if (editForm.hasCustomInterval) {
         // Find already started items in scheduleMatrix (status === 'past' || status === 'active')
         const allItems = Object.values(scheduleMatrix).flat() as ScheduleItem[];
@@ -3229,9 +3187,6 @@ const App: React.FC = () => {
 
     REACTORS.forEach(r => matrix[r.id] = []);
 
-    let prevWasSkipped = false;
-    let prevSkippedTime = 0;
-
     for (let col = 0; col < config.columnsToDisplay; col++) {
       for (let rIndex = 0; rIndex < REACTORS.length; rIndex++) {
         const reactor = REACTORS[rIndex];
@@ -3250,14 +3205,9 @@ const App: React.FC = () => {
         let effectiveTime = originalTime;
         const isSkipped = itemConfig?.isSkipped || false;
 
-        if (prevWasSkipped) {
-            // Ketika reaktor sebelumnya berstatus selain active (CLEANING_ROBOT, PASS, MAINTENANCE, dll),
-            // jam start dan nomor batch langsung berpindah ke reaktor ini
-            effectiveTime = new Date(prevSkippedTime + (Number(itemConfig?.manualDelayMinutes) || 0) * 60000);
-            sequenceCursor = effectiveTime.getTime();
-        } else if (itemConfig?.overrideTime) {
+        if (itemConfig?.overrideTime) {
             const overrideDate = new Date(itemConfig.overrideTime);
-            if (itemConfig.shiftSubsequent || itemConfig.isSkipped) {
+            if (itemConfig.shiftSubsequent) {
                 const diff = overrideDate.getTime() - effectiveTime.getTime();
                 sequenceCursor += diff; 
             }
@@ -3269,12 +3219,7 @@ const App: React.FC = () => {
 
         if (isSkipped) {
             status = 'skipped';
-            // Simpan waktu reaktor yang di-skip agar langsung diwariskan ke reaktor berikutnya
-            prevWasSkipped = true;
-            prevSkippedTime = effectiveTime.getTime();
-            sequenceCursor = prevSkippedTime;
         } else {
-            prevWasSkipped = false;
             const diffSeconds = (now.getTime() - effectiveTime.getTime()) / 1000;
             if (diffSeconds > 60) {
                 status = 'past';
@@ -3297,9 +3242,13 @@ const App: React.FC = () => {
           deltaMinutes: deltaMinutes
         });
 
+        // Reaktor berikutnya selalu melanjutkan sesuai interval yang ditentukan (misalnya 13:00 + 1:20 = 14:20),
+        // bahkan ketika reaktor saat ini berstatus selain active (CLEANING_ROBOT, PASS, MAINTENANCE, dll)
+        sequenceCursor += (runningIntervalMinutes * 60000);
+        lastAddedIntervalMinutes = runningIntervalMinutes;
+
+        // Nomor batch dialihkan ke reaktor berikutnya jika reaktor ini tidak aktif memproduksi
         if (!isSkipped) {
-            sequenceCursor += (runningIntervalMinutes * 60000);
-            lastAddedIntervalMinutes = runningIntervalMinutes;
             currentBatch++;
         }
         
@@ -3974,7 +3923,7 @@ const App: React.FC = () => {
             <div className="h-6 lg:h-7 w-[1.5px] bg-slate-200 dark:bg-slate-700 shrink-0" />
 
             {/* Title & Subtitle */}
-            <div className="flex flex-col items-center justify-center leading-none min-w-0">
+            <div className={`flex flex-col items-center justify-center leading-none min-w-0 transition-all duration-300 ${(fullScreenAlertItem || isNextStartImminent) ? 'animate-shimmer-glow' : ''}`}>
               <h1 className="text-[1.35em] lg:text-[1.95em] font-black tracking-tight leading-none uppercase flex items-center justify-center gap-1.5">
                 <span className="text-slate-950 dark:text-white">
                   SCHEDULE
@@ -4695,9 +4644,9 @@ const App: React.FC = () => {
                            digeser ke kanan dan barisnya jadi tak dikenali. */
                         className={`${reactor.color} ${reactor.textColor} border-r border-slate-900/10 dark:border-slate-900/30 p-1 lg:p-2 relative group sticky left-0 z-20`}
                         style={{
-                          width: `${isDesktop ? 140 : MOBILE_REACTOR_COL}px`,
-                          minWidth: `${isDesktop ? 140 : MOBILE_REACTOR_COL}px`,
-                          maxWidth: `${isDesktop ? 140 : MOBILE_REACTOR_COL}px`,
+                          width: `${isDesktop ? 112 : MOBILE_REACTOR_COL}px`,
+                          minWidth: `${isDesktop ? 112 : MOBILE_REACTOR_COL}px`,
+                          maxWidth: `${isDesktop ? 112 : MOBILE_REACTOR_COL}px`,
                         }}
                       >
                          <div className="flex flex-col items-center justify-center h-full">
@@ -4789,7 +4738,7 @@ const App: React.FC = () => {
                               title={isMobileScheduleReadOnly ? 'Schedule hanya dapat diubah dari desktop' : 'Klik untuk mengubah schedule'}
                               className={cellClasses}
                               style={{
-                                width: `calc((100% - ${isDesktop ? 140 : MOBILE_REACTOR_COL}px) / ${config.columnsToDisplay})`,
+                                width: `calc((100% - ${isDesktop ? 112 : MOBILE_REACTOR_COL}px) / ${config.columnsToDisplay})`,
                                 minWidth: `${isDesktop ? 130 : MOBILE_CELL_MIN}px`,
                               }}
                           >
@@ -6806,7 +6755,7 @@ const App: React.FC = () => {
                                 {editForm.isSkipped && (
                                     <div className="flex items-center gap-1.5 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-300 font-bold text-[10px] leading-tight">
                                         <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-                                        <span>Jam start ({formatTime(selectedItem.startTime)}) &amp; No. Batch (#{selectedItem.batchNumber}) berpindah ke reaktor berikutnya.</span>
+                                        <span>Status selain ACTIVE: Reaktor berikutnya start melanjutkan interval (+{config.intervalHours}j {config.intervalMinutes}m) dengan No. Batch #{selectedItem.batchNumber}.</span>
                                     </div>
                                 )}
                              </div>
